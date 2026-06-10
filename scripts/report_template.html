@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hlokk — {{ u.title|default('论文报告') }}</title>
+<style>
+:root { --bg:#f8f7f4; --card:#fff; --border:#e2dfd9; --accent:#2d5a7b; --accent2:#4a8c6f;
+  --text:#2c2c2c; --muted:#6b6b6b; --tag-bg:#eef2f7; --warn:#c0792a; --danger:#b04040;
+  --blue:#2d5a7b; --teal:#2a7a6a; --green:#4a8c6f; --orange:#c0792a; --purple:#6b5b8a; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:var(--bg); color:var(--text); line-height:1.65; font-size:15px; }
+.container { max-width:1100px; margin:0 auto; padding:16px 20px; }
+
+/* Header */
+header { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; padding:32px 0 24px; }
+header .container { display:flex; flex-direction:column; gap:8px; }
+header h1 { font-size:1.5em; font-weight:600; line-height:1.35; }
+header .meta { opacity:.85; font-size:.9em; }
+header .meta a { color:#cde; }
+header .tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+header .tag { background:rgba(255,255,255,.18); padding:2px 10px; border-radius:12px; font-size:.8em; }
+
+/* Tabs */
+.tab-bar { background:var(--card); border-bottom:2px solid var(--border); position:sticky; top:0; z-index:100; }
+.tab-bar .container { display:flex; gap:0; overflow-x:auto; }
+.tab-btn { padding:12px 18px; cursor:pointer; border:none; background:none; font-size:.9em;
+  color:var(--muted); border-bottom:3px solid transparent; white-space:nowrap; transition:.15s; }
+.tab-btn:hover { color:var(--text); }
+.tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+.tab-panel { display:none; padding:24px 0; }
+.tab-panel.active { display:block; }
+
+/* Cards */
+.card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:20px; margin-bottom:16px; }
+.card h3 { font-size:1.05em; margin-bottom:10px; color:var(--accent); }
+.card-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; }
+
+/* Reading cipher colors */
+.rc-intro { border-left:4px solid var(--blue); }
+.rc-review { border-left:4px solid var(--teal); }
+.rc-result { border-left:4px solid var(--green); }
+.rc-conclusion { border-left:4px solid var(--orange); }
+.rc-label { display:inline-block; font-weight:700; font-size:.8em; padding:2px 8px;
+  border-radius:4px; margin-bottom:6px; color:#fff; }
+.rc-label.intro { background:var(--blue); }
+.rc-label.review { background:var(--teal); }
+.rc-label.result { background:var(--green); }
+.rc-label.conclusion { background:var(--orange); }
+
+/* Tables */
+table { width:100%; border-collapse:collapse; font-size:.9em; }
+th { background:var(--tag-bg); text-align:left; padding:10px 12px; font-weight:600;
+  border-bottom:2px solid var(--border); position:sticky; top:52px; z-index:5; cursor:pointer; }
+th:hover { background:#dde4ed; }
+td { padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+tr:hover td { background:#faf9f6; }
+
+/* Strength badges */
+.badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:.78em; font-weight:600; }
+.badge-strong { background:#d4edda; color:#155724; }
+.badge-moderate { background:#fff3cd; color:#856404; }
+.badge-weak { background:#f8d7da; color:#721c24; }
+.badge-high { background:#d4edda; color:#155724; }
+.badge-medium { background:#fff3cd; color:#856404; }
+.badge-low { background:#f8d7da; color:#721c24; }
+.badge-stated { background:#d4edda; color:#155724; }
+.badge-inferred { background:#e2d6f3; color:#4a2d7a; }
+
+/* Figures */
+.fig-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(480px,1fr)); gap:20px; }
+.fig-card { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:var(--card); }
+.fig-card .fig-img { background:#f0eeeb; text-align:center; cursor:pointer; max-height:400px; overflow:hidden; }
+.fig-card .fig-img img { width:100%; display:block; object-fit:contain; }
+.fig-card .fig-body { padding:16px; }
+.fig-card .fig-id { font-weight:700; color:var(--accent); margin-bottom:6px; }
+
+/* Collapsible */
+.collapsible { cursor:pointer; user-select:none; }
+.collapsible::after { content:" ▼"; font-size:.7em; color:var(--muted); }
+.collapsible.collapsed::after { content:" ▶"; }
+.coll-body { overflow:hidden; transition:max-height .3s ease; }
+.coll-body.collapsed { max-height:0 !important; }
+
+/* Lightbox */
+.lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:1000;
+  align-items:center; justify-content:center; cursor:pointer; }
+.lightbox.show { display:flex; }
+.lightbox img { max-width:95vw; max-height:95vh; border-radius:4px; }
+
+/* Search */
+.search-box { padding:8px 14px; border:1px solid var(--border); border-radius:8px; width:100%;
+  max-width:400px; margin-bottom:16px; font-size:.9em; }
+
+/* Misc */
+.section-title { font-size:1.15em; font-weight:600; margin:0 0 16px 0; color:var(--text); }
+.text-muted { color:var(--muted); }
+.mb-8 { margin-bottom:8px; }
+.mb-16 { margin-bottom:16px; }
+.list-item { padding:8px 0; border-bottom:1px solid var(--border); }
+.list-item:last-child { border-bottom:none; }
+footer { text-align:center; padding:24px; color:var(--muted); font-size:.82em; }
+
+/* Literature Report */
+.report-section { margin-bottom:28px; }
+.report-section h3 { font-size:1.1em; font-weight:600; color:var(--accent); margin-bottom:10px;
+  padding-bottom:6px; border-bottom:2px solid var(--border); }
+.report-section .report-body { font-size:.95em; line-height:1.8; color:var(--text); }
+.report-section .report-body p { margin-bottom:12px; text-indent:2em; }
+.report-label { display:inline-block; font-weight:700; font-size:.75em; padding:2px 10px;
+  border-radius:4px; margin-bottom:8px; color:#fff; letter-spacing:.5px; }
+.report-label.theme { background:var(--blue); }
+.report-label.review { background:var(--teal); }
+.report-label.gap { background:#8b6bb0; }
+.report-label.result { background:var(--green); }
+.report-label.innovation { background:var(--orange); }
+.report-label.method { background:#5a7a8c; }
+.report-label.strategy { background:#8b5a5a; }
+.report-label.recommend { background:#5a6b8c; }
+.report-divider { border:none; border-top:1px dashed var(--border); margin:24px 0; }
+
+/* Research Recommendations & Reading Strategy */
+.rec-card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:20px; margin-bottom:16px; border-left:4px solid var(--accent); }
+.rec-card h4 { font-size:1em; font-weight:600; color:var(--accent); margin-bottom:8px; }
+.rec-card .rec-body { font-size:.95em; line-height:1.8; color:var(--text); }
+.strategy-card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:20px; margin-bottom:16px; }
+.strategy-card .strategy-tag { display:inline-block; font-weight:700; font-size:.8em;
+  padding:3px 10px; border-radius:4px; color:#fff; margin-right:8px; margin-bottom:8px; }
+.strategy-tag.poc { background:#b04040; }
+.strategy-tag.mop { background:#c0792a; }
+.strategy-tag.rpp { background:#6b5b8a; }
+.strategy-tag.wil { background:#2a7a6a; }
+
+/* Research Threads tree */
+.thread-card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:20px; margin-bottom:16px; border-left:4px solid var(--accent); }
+.thread-card h4 { font-size:1.05em; font-weight:600; color:var(--accent); margin-bottom:12px; cursor:pointer; }
+.thread-card h4::after { content:" ▼"; font-size:.65em; color:var(--muted); }
+.sub-q { margin-left:16px; padding:10px 0; border-bottom:1px solid var(--border); }
+.sub-q:last-child { border-bottom:none; }
+.sub-q-title { font-weight:600; font-size:.95em; margin-bottom:6px; cursor:pointer; }
+.sub-q-title::after { content:" ▼"; font-size:.6em; color:var(--muted); }
+.evidence-pt { margin-left:24px; padding:6px 0; font-size:.9em; }
+.evidence-pt .ev-loc { color:var(--muted); font-size:.82em; }
+
+/* Mode badge */
+.mode-badge { display:inline-block; padding:3px 10px; border-radius:12px;
+  font-size:.75em; font-weight:600; color:#fff; margin-left:8px; }
+.mode-badge.overview { background:var(--teal); }
+.mode-badge.detailed { background:var(--purple); }
+
+/* Doc type badge */
+.dtype-badge { display:inline-block; padding:3px 10px; border-radius:12px;
+  font-size:.75em; font-weight:600; color:#fff; margin-left:8px; }
+.dtype-badge.article { background:var(--blue); }
+.dtype-badge.review { background:var(--teal); }
+.dtype-badge.benchmark { background:var(--orange); }
+.dtype-badge.atlas { background:var(--green); }
+.dtype-badge.commentary { background:var(--purple); }
+
+/* Debate cards */
+.debate-card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:16px; margin-bottom:12px; }
+.debate-card .camp { display:inline-block; padding:2px 8px; border-radius:4px; font-size:.82em; font-weight:600; }
+.camp-a { background:#e8f4fd; color:#1a5276; }
+.camp-b { background:#fde8e8; color:#761a1a; }
+
+@media(max-width:640px) { .fig-grid,.card-grid { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+<div class="container">
+  <h1>{{ u.title|default('未命名论文') }}
+    <span class="mode-badge {{ analysis_mode|default('overview') }}">{{ analysis_mode|default('overview') }}</span>
+    <span class="dtype-badge {{ doc_type|default('article') }}">{{ doc_type|default('article') }}</span>
+  </h1>
+  <div class="meta">
+    {{ u.authors|default('') }} &nbsp;|&nbsp; {{ u.journal_year|default('') }}
+    {% if u.code_availability %} &nbsp;|&nbsp; <a href="{{ u.code_availability }}" target="_blank">代码</a>{% endif %}
+  </div>
+  <div class="tags">
+    {% for dt in u.data_types|default([]) %}<span class="tag">{{ dt }}</span>{% endfor %}
+    {% if profile.focus %}<span class="tag">聚焦：{{ profile.focus }}</span>{% endif %}
+    {% if profile.session_focus %}<span class="tag">专题：{{ profile.session_focus }}</span>{% endif %}
+  </div>
+</div>
+</header>
+
+<!-- Tab Bar (type-aware labels) -->
+<div class="tab-bar"><div class="container">
+  <button class="tab-btn active" data-tab="overview">概览</button>
+  <button class="tab-btn" data-tab="report">文献阅读汇报</button>
+  <button class="tab-btn" data-tab="cipher">阅读密码</button>
+  <button class="tab-btn" data-tab="figures">{% if doc_type == 'review' %}图表组织{% elif doc_type == 'benchmark' %}评测图表{% elif doc_type == 'atlas' %}资源图表{% else %}图表论证{% endif %}</button>
+  <button class="tab-btn" data-tab="methods">{% if doc_type == 'review' %}方法族图谱{% elif doc_type == 'benchmark' %}评测设计{% elif doc_type == 'atlas' %}资源设计{% elif doc_type == 'commentary' %}论证结构{% else %}方法工具{% endif %}</button>
+  <button class="tab-btn" data-tab="relevance">个性化解读</button>
+  <button class="tab-btn" data-tab="evidence">证据索引</button>
+</div></div>
+
+<div class="container">
+
+<!-- ========== Tab 1: Overview ========== -->
+<div id="tab-overview" class="tab-panel active">
+  <div class="card">
+    <h3>{% if doc_type == 'review' %}综述目标{% elif doc_type == 'benchmark' %}评测目标{% elif doc_type == 'atlas' %}资源目标{% elif doc_type == 'commentary' %}核心论点{% else %}研究问题{% endif %}</h3>
+    <p>{{ u.research_question|default(u.field_positioning|default('N/A')) }}</p>
+  </div>
+  <div class="card-grid">
+    <div class="card">
+      <h3>{% if doc_type == 'atlas' %}数据与平台{% else %}数据与设计{% endif %}</h3>
+      <p class="mb-8"><strong>数据类型：</strong>{{ u.data_types|default([])|join(', ') }}</p>
+      <p class="mb-8"><strong>样本信息：</strong>{{ u.sample_info|default('N/A') }}</p>
+      <p><strong>{% if doc_type == 'benchmark' %}评测设计{% else %}实验设计{% endif %}：</strong>{{ u.study_design|default('N/A') }}</p>
+    </div>
+    <div class="card">
+      <h3>数据与代码</h3>
+      <p class="mb-8"><strong>数据可用性：</strong>{{ u.data_availability|default('未提及') }}</p>
+      <p><strong>代码可用性：</strong>{{ u.code_availability|default('未提及') }}</p>
+    </div>
+  </div>
+
+  <!-- Key Findings (universal) -->
+  <div class="section-title">主要发现</div>
+  {% for f in u.key_findings|default([]) %}
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-{{ f.strength|default('moderate') }}">{{ f.strength|default('?') }}</span>
+      <span class="badge badge-{{ f.evidence_type|default('stated') }}">{{ f.evidence_type|default('?') }}</span>
+      <span class="text-muted" style="font-size:.82em;margin-left:8px;">{{ f.evidence_location|default('') }}</span>
+    </div>
+    <p>{{ f.finding|default('') }}</p>
+  </div>
+  {% endfor %}
+
+  <!-- Type-specific overview sections -->
+  {% if doc_type == 'article' %}
+    <!-- Research Threads (article) -->
+    {% if u.research_threads %}
+    <div class="section-title">研究线索（层级化论证）</div>
+    <p class="text-muted mb-16">主问题 → 子问题 → 证据点：可追溯的论证链条。</p>
+    {% for thread in u.research_threads %}
+    <div class="thread-card">
+      <h4 onclick="this.parentElement.querySelector('.thread-body').classList.toggle('collapsed')">
+        <span class="badge badge-moderate">阶段{{ thread.narrative_stage|default('') }}</span>
+        {{ thread.main_question|default('N/A') }}
+      </h4>
+      <div class="thread-body">
+      {% if thread.sub_questions %}
+      {% for sq in thread.sub_questions %}
+      <div class="sub-q">
+        <div class="sub-q-title" onclick="this.nextElementSibling.classList.toggle('collapsed')">{{ sq.sub_question|default('') }}</div>
+        <div class="coll-body">
+        {% if sq.evidence_points %}
+        {% for ep in sq.evidence_points %}
+        <div class="evidence-pt">
+          <span class="badge badge-{{ ep.strength|default('moderate') }}">{{ ep.strength|default('?') }}</span>
+          {{ ep.claim|default('') }}
+          <span class="ev-loc">— {{ ep.evidence_location|default('') }}</span>
+        </div>
+        {% endfor %}
+        {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+      {% endif %}
+      {% if thread.takeaway %}
+      <p style="margin-top:12px;padding:10px 14px;background:var(--tag-bg);border-radius:6px;font-size:.92em;"><strong>Take-home：</strong>{{ thread.takeaway }}</p>
+      {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+  {% elif doc_type == 'review' %}
+    <!-- Thematic Threads (review) -->
+    {% if u.thematic_threads %}
+    <div class="section-title">主题线索</div>
+    <p class="text-muted mb-16">综述按主题组织的知识结构，每个主题追踪其演进和开放问题。</p>
+    {% for thread in u.thematic_threads %}
+    <div class="thread-card">
+      <h4 onclick="this.parentElement.querySelector('.thread-body').classList.toggle('collapsed')">
+        <span class="badge badge-moderate">#{{ thread.theme_order|default('') }}</span>
+        {{ thread.theme_name|default('N/A') }}
+      </h4>
+      <div class="thread-body">
+        <p class="mb-8"><strong>范围：</strong>{{ thread.theme_scope|default('') }}</p>
+        <p class="mb-8"><strong>演进：</strong>{{ thread.evolution_narrative|default('') }}</p>
+        <p class="mb-8"><strong>当前水平：</strong>{{ thread.current_state|default('') }}</p>
+        {% if thread.open_questions %}
+        <p class="mb-8"><strong>开放问题：</strong></p>
+        {% if thread.open_questions is iterable and thread.open_questions is not string %}
+        {% for q in thread.open_questions %}<div class="list-item">{{ q }}</div>{% endfor %}
+        {% else %}<p>{{ thread.open_questions }}</p>{% endif %}
+        {% endif %}
+        {% if thread.key_references %}
+        <p class="text-muted" style="margin-top:8px;font-size:.85em;">关键引用：{{ thread.key_references|join('; ') }}</p>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <!-- Consensus & Debate (review) -->
+    {% if u.consensus_and_debate %}
+    <div class="section-title">领域共识与争议</div>
+    {% if u.consensus_and_debate.consensus_points %}
+    <p class="text-muted mb-8">共识</p>
+    {% for c in u.consensus_and_debate.consensus_points %}
+    <div class="card"><span class="badge badge-{{ c.evidence_strength|default('moderate') }}">{{ c.evidence_strength|default('') }}</span> {{ c.point|default('') }}</div>
+    {% endfor %}
+    {% endif %}
+    {% if u.consensus_and_debate.debate_points %}
+    <p class="text-muted mb-8" style="margin-top:16px;">争议</p>
+    {% for d in u.consensus_and_debate.debate_points %}
+    <div class="debate-card">
+      <p class="mb-8"><strong>{{ d.point|default('') }}</strong></p>
+      <span class="camp camp-a">A: {{ d.camp_a|default('') }}</span>
+      <span class="camp camp-b">B: {{ d.camp_b|default('') }}</span>
+      <p class="text-muted" style="margin-top:6px;font-size:.85em;">状态：{{ d.resolution_status|default('') }}</p>
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% endif %}
+
+  {% elif doc_type == 'benchmark' %}
+    <!-- Evaluation Threads (benchmark) -->
+    {% if u.evaluation_threads %}
+    <div class="section-title">评测维度分析</div>
+    {% for thread in u.evaluation_threads %}
+    <div class="thread-card">
+      <h4 onclick="this.parentElement.querySelector('.thread-body').classList.toggle('collapsed')">
+        <span class="badge badge-moderate">#{{ thread.dimension_order|default('') }}</span>
+        {{ thread.dimension_name|default('N/A') }}
+      </h4>
+      <div class="thread-body">
+        <p class="mb-8"><strong>主要发现：</strong>{{ thread.main_findings|default('') }}</p>
+        {% if thread.top_performers %}<p class="mb-8"><strong>最佳：</strong>{{ thread.top_performers|join(', ') }}</p>{% endif %}
+        {% if thread.bottom_performers %}<p class="mb-8"><strong>最差：</strong>{{ thread.bottom_performers|join(', ') }}</p>{% endif %}
+        {% if thread.surprising_results %}<p class="mb-8"><strong>意外发现：</strong>{{ thread.surprising_results }}</p>{% endif %}
+        {% if thread.confounding_factors %}<p class="mb-8"><strong>混杂因素：</strong>{{ thread.confounding_factors }}</p>{% endif %}
+        <p class="text-muted" style="font-size:.85em;">{{ thread.evidence_location|default('') }}</p>
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <!-- Rankings (benchmark) -->
+    {% if u.rankings_and_recommendations %}
+    <div class="section-title">排名与推荐</div>
+    {% if u.rankings_and_recommendations.overall_ranking %}
+    <table>
+      <thead><tr><th>排名</th><th>方法</th><th>优势</th><th>劣势</th><th>最佳场景</th></tr></thead>
+      <tbody>
+      {% for r in u.rankings_and_recommendations.overall_ranking %}
+      <tr><td><strong>#{{ r.rank|default('') }}</strong></td><td>{{ r.method|default('') }}</td><td>{{ r.strengths|default('') }}</td><td>{{ r.weaknesses|default('') }}</td><td>{{ r.best_scenario|default('') }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {% if u.rankings_and_recommendations.practical_guidelines %}
+    <div class="card" style="margin-top:16px;">
+      <h3>实践指南</h3>
+      <p>{{ u.rankings_and_recommendations.practical_guidelines }}</p>
+    </div>
+    {% endif %}
+    {% endif %}
+
+  {% elif doc_type == 'atlas' %}
+    <!-- Initial Biological Findings (atlas) -->
+    {% if u.initial_biological_findings %}
+    <div class="section-title">初步生物学发现</div>
+    {% for f in u.initial_biological_findings %}
+    <div class="card">
+      <div class="mb-8">
+        <span class="badge badge-{{ f.novelty|default('moderate') }}">新颖度: {{ f.novelty|default('?') }}</span>
+        <span class="text-muted" style="font-size:.82em;margin-left:8px;">{{ f.evidence_location|default('') }}</span>
+      </div>
+      <p>{{ f.finding|default('') }}</p>
+      {% if f.methods_used %}<p class="text-muted" style="font-size:.85em;margin-top:4px;">方法: {{ f.methods_used }}</p>{% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <!-- Resource Comparison (atlas) -->
+    {% if u.resource_comparison %}
+    <div class="section-title">资源对比</div>
+    <div class="card">
+      {% if u.resource_comparison.compared_to %}<p class="mb-8"><strong>对比对象：</strong>{{ u.resource_comparison.compared_to|join(', ') }}</p>{% endif %}
+      {% if u.resource_comparison.advantages %}<p class="mb-8"><strong>优势：</strong>{{ u.resource_comparison.advantages|join('；') }}</p>{% endif %}
+      {% if u.resource_comparison.limitations %}<p class="mb-8"><strong>局限：</strong>{{ u.resource_comparison.limitations|join('；') }}</p>{% endif %}
+      {% if u.resource_comparison.complementary_resources %}<p><strong>互补资源：</strong>{{ u.resource_comparison.complementary_resources|join(', ') }}</p>{% endif %}
+    </div>
+    {% endif %}
+
+  {% elif doc_type == 'commentary' %}
+    <!-- Commentary Structure (overview) -->
+    {% if u.commentary_structure %}
+    <div class="section-title">论证结构</div>
+    <div class="card">
+      <p class="mb-8"><strong>触发事件：</strong>{{ u.commentary_structure.trigger|default('N/A') }}</p>
+      <p class="mb-8"><strong>核心论点：</strong>{{ u.commentary_structure.main_position|default('N/A') }}</p>
+      <p class="mb-8"><strong>呼吁：</strong>{{ u.commentary_structure.call_to_action|default('N/A') }}</p>
+      <p><strong>若正确则：</strong>{{ u.commentary_structure.implications_if_correct|default('N/A') }}</p>
+    </div>
+    {% if u.commentary_structure.argument_chain %}
+    <div class="section-title">论证链</div>
+    {% for step in u.commentary_structure.argument_chain %}
+    <div class="card" style="border-left:4px solid var(--accent);">
+      <span class="badge badge-moderate">步骤 {{ step.step|default('') }}</span>
+      <span class="badge badge-{{ step.evidence_type|default('logical') }}">{{ step.evidence_type|default('') }}</span>
+      <p class="mb-8" style="margin-top:8px;"><strong>论断：</strong>{{ step.claim|default('') }}</p>
+      <p class="text-muted">证据：{{ step.evidence|default('') }}</p>
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% endif %}
+  {% endif %}
+
+  <!-- Limitations (universal) -->
+  {% if u.limitations %}
+  <div class="section-title">局限性</div>
+  {% for l in u.limitations %}
+  <div class="list-item">{{ l.limitation|default('') }} <span class="text-muted" style="font-size:.82em;">— {{ l.evidence_location|default('') }}</span></div>
+  {% endfor %}
+  {% endif %}
+  {% if u.limitations_of_benchmark %}
+  <div class="section-title">评测局限性</div>
+  {% for l in u.limitations_of_benchmark %}
+  <div class="list-item"><span class="badge badge-{{ l.evidence_type|default('stated') }}">{{ l.evidence_type|default('') }}</span> {{ l.limitation|default('') }} — <span class="text-muted">影响: {{ l.impact|default('') }}</span></div>
+  {% endfor %}
+  {% endif %}
+  {% if u.limitations_and_gaps %}
+  <div class="section-title">资源局限性</div>
+  {% for l in u.limitations_and_gaps %}
+  <div class="list-item"><span class="badge badge-moderate">{{ l.category|default('') }}</span> {{ l.limitation|default('') }} — <span class="text-muted">影响: {{ l.impact|default('') }}</span></div>
+  {% endfor %}
+  {% endif %}
+</div>
+
+<!-- ========== Tab: Literature Reading Report ========== -->
+<div id="tab-report" class="tab-panel">
+  {% if u.literature_report %}
+
+  {% if doc_type == 'article' %}
+  <p class="text-muted mb-16">基于论文全文的结构化阅读汇报，覆盖主题、综述、空白、结果、创新与方法评价。</p>
+  <div class="report-section"><span class="report-label theme">研究主题</span><h3>本文主题与研究动机</h3><div class="report-body"><p>{{ u.literature_report.topic_summary|default('N/A') }}</p></div></div>
+  <hr class="report-divider">
+  <div class="report-section"><span class="report-label review">文献综述</span><h3>对现有研究的综述</h3><div class="report-body"><p>{{ u.literature_report.literature_review|default('N/A') }}</p></div></div>
+  <div class="report-section"><span class="report-label gap">研究空白</span><h3>现有文献不足与研究空白</h3><div class="report-body"><p>{{ u.literature_report.literature_gaps|default('N/A') }}</p></div></div>
+  <div class="report-section"><span class="report-label gap">理论依据</span><h3>本研究的理论依据</h3><div class="report-body"><p>{{ u.literature_report.rationale|default('N/A') }}</p></div></div>
+  <hr class="report-divider">
+  <div class="report-section"><span class="report-label result">研究结果</span><h3>主要研究结果</h3><div class="report-body"><p>{{ u.literature_report.results_narrative|default('N/A') }}</p></div></div>
+  <div class="report-section"><span class="report-label result">论证结构</span><h3>分论点与核心主题的关系</h3><div class="report-body"><p>{{ u.literature_report.argument_structure|default('N/A') }}</p></div></div>
+  <div class="report-section"><span class="report-label result">文献对照</span><h3>与现有文献一致的结果</h3><div class="report-body"><p>{{ u.literature_report.consistent_with_literature|default('N/A') }}</p></div></div>
+  <div class="report-section"><span class="report-label innovation">核心创新</span><h3>核心创新点</h3><div class="report-body"><p>{{ u.literature_report.novel_contributions|default('N/A') }}</p></div></div>
+  <hr class="report-divider">
+  <div class="report-section"><span class="report-label innovation">未来展望</span><h3>对未来研究的建议</h3><div class="report-body"><p>{{ u.literature_report.future_directions|default('N/A') }}</p></div></div>
+  <hr class="report-divider">
+  <div class="report-section"><span class="report-label method">数据与方法</span><h3>数据来源详述</h3><div class="report-body"><p>{{ u.literature_report.data_sources_detail|default('N/A') }}</p></div></div>
+  <div class="report-section"><span class="report-label method">方法评价</span><h3>分析方法的准确性、适用性与创新性</h3><div class="report-body"><p>{{ u.literature_report.methods_assessment|default('N/A') }}</p></div></div>
+
+  {% elif doc_type == 'review' %}
+  <p class="text-muted mb-16">综述文献的结构化阅读汇报：主题综合、方法对比、空白综述与领域展望。</p>
+  <div class="report-section"><span class="report-label theme">综述主题</span><h3>主题与动机</h3><div class="report-body"><p>{{ u.literature_report.topic_summary|default('N/A') }}</p></div></div>
+  <div class="report-section"><span class="report-label review">覆盖范围</span><h3>综述范围与方法</h3><div class="report-body"><p>{{ u.literature_report.scope_and_methodology|default('N/A') }}</p></div></div>
+  <hr class="report-divider">
+  <div class="report-section"><span class="report-label result">主题综合</span><h3>领域知识体系综合叙述</h3><div class="report-body"><p>{{ u.literature_report.thematic_synthesis|default('N/A') }}</p></div></div>
+  <div class="report-section"><span class="report-label method">方法对比</span><h3>不同方法/观点的对比评价</h3><div class="report-body"><p>{{ u.literature_report.comparative_analysis|default('N/A') }}</p></div></div>
+  <hr class="report-divider">
+  <div class="report-section"><span class="report-label gap">研究空白</span><h3>综合研究空白</h3><div class="report-body"><p>{{ u.literature_report.gaps_synthesis|default('N/A') }}</p></div></div>
+  <div class="report-section"><span class="report-label innovation">未来展望</span><h3>领域发展展望</h3><div class="report-body"><p>{{ u.literature_report.future_outlook|default('N/A') }}</p></div></div>
+  <div class="report-section"><span class="report-label theme">领域贡献</span><h3>该综述对领域的贡献和意义</h3><div class="report-body"><p>{{ u.literature_report.relevance_to_field|default('N/A') }}</p></div></div>
+
+  {% elif doc_type == 'benchmark' %}
+  <p class="text-muted mb-16">评测论文阅读汇报：问题背景、方法概览、评测结果、对比讨论与实践启示。</p>
+  <div class="report-section"><span class="report-label theme">评测背景</span><h3>评测问题背景和动机</h3><div class="report-body"><p>{{ u.literature_report.topic_summary|default('N/A') }}</p></div></div>
+  <div class="report-section"><span class="report-label method">方法概览</span><h3>被评测方法的技术原理</h3><div class="report-body"><p>{{ u.literature_report.methods_overview|default('N/A') }}</p></div></div>
+  <hr class="report-divider">
+  <div class="report-section"><span class="report-label result">评测结果</span><h3>按维度叙述评测结果</h3><div class="report-body"><p>{{ u.literature_report.evaluation_narrative|default('N/A') }}</p></div></div>
+  <div class="report-section"><span class="report-label result">差异分析</span><h3>方法间差异的原因分析</h3><div class="report-body"><p>{{ u.literature_report.comparative_discussion|default('N/A') }}</p></div></div>
+  <hr class="report-divider">
+  <div class="report-section"><span class="report-label innovation">实践启示</span><h3>对实际使用者的指导意义</h3><div class="report-body"><p>{{ u.literature_report.practical_implications|default('N/A') }}</p></div></div>
+  <div class="report-section"><span class="report-label gap">评测局限</span><h3>评测设计的局限性</h3><div class="report-body"><p>{{ u.literature_report.benchmark_limitations|default('N/A') }}</p></div></div>
+
+  {% elif doc_type == 'atlas' %}
+  <p class="text-muted mb-16">资源/图谱论文阅读汇报：设计背景、质量评估、生物学发现、资源使用指南。</p>
+  <div class="report-section"><span class="report-label theme">资源背景</span><h3>资源构建的背景和动机</h3><div class="report-body"><p>{{ u.literature_report.topic_summary|default('N/A') }}</p></div></div>
+  <div class="report-section"><span class="report-label method">设计决策</span><h3>资源设计决策的详细叙述</h3><div class="report-body"><p>{{ u.literature_report.resource_design_narrative|default('N/A') }}</p></div></div>
+  <hr class="report-divider">
+  <div class="report-section"><span class="report-label result">质量评估</span><h3>数据质量和注释质量</h3><div class="report-body"><p>{{ u.literature_report.quality_assessment|default('N/A') }}</p></div></div>
+  <div class="report-section"><span class="report-label innovation">生物学发现</span><h3>初步发现叙述</h3><div class="report-body"><p>{{ u.literature_report.biological_insights|default('N/A') }}</p></div></div>
+  <hr class="report-divider">
+  <div class="report-section"><span class="report-label review">对比定位</span><h3>与已有资源的对比</h3><div class="report-body"><p>{{ u.literature_report.comparison_and_positioning|default('N/A') }}</p></div></div>
+  <div class="report-section"><span class="report-label recommend">使用指南</span><h3>资源使用实用指南</h3><div class="report-body"><p>{{ u.literature_report.reuse_guide|default('N/A') }}</p></div></div>
+
+  {% elif doc_type == 'commentary' %}
+  <p class="text-muted mb-16">评论/观点文章阅读汇报：主题背景、论证叙述与影响评估。</p>
+  <div class="report-section"><span class="report-label theme">主题背景</span><h3>评论主题和背景</h3><div class="report-body"><p>{{ u.literature_report.topic_summary|default('N/A') }}</p></div></div>
+  <hr class="report-divider">
+  <div class="report-section"><span class="report-label result">论证叙述</span><h3>论证展开的逻辑</h3><div class="report-body"><p>{{ u.literature_report.argument_narrative|default('N/A') }}</p></div></div>
+  <div class="report-section"><span class="report-label innovation">影响评估</span><h3>影响和意义</h3><div class="report-body"><p>{{ u.literature_report.implications|default('N/A') }}</p></div></div>
+  {% endif %}
+
+  {% else %}
+  <div class="card"><p class="text-muted">未生成文献阅读汇报数据。</p></div>
+  {% endif %}
+
+  <!-- Reading Strategy (universal, QoderWork-generated) -->
+  {% if u.reading_strategy %}
+  <hr class="report-divider">
+  <div class="section-title">阅读策略标注</div>
+  <p class="text-muted mb-16">基于学术阅读策略框架，对论文进行批判性标注与延伸思考。</p>
+  <div class="strategy-card"><span class="strategy-tag poc">POC</span><strong>批评点</strong><div class="rec-body" style="margin-top:10px;"><p>{{ u.reading_strategy.POC|default('N/A') }}</p></div></div>
+  <div class="strategy-card"><span class="strategy-tag mop">MOP</span><strong>明显遗漏点</strong><div class="rec-body" style="margin-top:10px;"><p>{{ u.reading_strategy.MOP|default('N/A') }}</p></div></div>
+  <div class="strategy-card"><span class="strategy-tag rpp">RPP</span><strong>待探讨问题</strong><div class="rec-body" style="margin-top:10px;"><p>{{ u.reading_strategy.RPP|default('N/A') }}</p></div></div>
+  <div class="strategy-card"><span class="strategy-tag wil">WIL</span><strong>能否化解矛盾</strong><div class="rec-body" style="margin-top:10px;"><p>{{ u.reading_strategy.WIL|default('N/A') }}</p></div></div>
+  {% endif %}
+</div>
+
+<!-- ========== Tab: Reading Cipher (universal) ========== -->
+<div id="tab-cipher" class="tab-panel">
+  <p class="text-muted mb-16">学术论文叙事结构解码：从前言到结论的完整论证链路。</p>
+  <div class="card rc-intro"><span class="rc-label intro">前言 · WTD</span><h3>他们要做什么</h3><p>{{ rc.WTD|default('N/A') }}</p></div>
+  <div class="card rc-review"><span class="rc-label review">综述 · SPL</span><h3>现有文献综述</h3><p>{{ rc.SPL|default('N/A') }}</p></div>
+  <div class="card rc-review"><span class="rc-label review">综述 · CPL</span><h3>现有文献批评</h3><p>{{ rc.CPL|default('N/A') }}</p></div>
+  <div class="card rc-review"><span class="rc-label review">综述 · GAP</span><h3>研究空白</h3><p>{{ rc.GAP|default('N/A') }}</p></div>
+  <div class="card rc-review"><span class="rc-label review">综述 · RAT</span><h3>理论依据</h3><p>{{ rc.RAT|default('N/A') }}</p></div>
+  <div class="card rc-result"><span class="rc-label result">结果 · ROF</span><h3>研究结果</h3>{% if rc.ROF is iterable and rc.ROF is not string %}{% for r in rc.ROF %}<div class="list-item">{{ r }}</div>{% endfor %}{% else %}<p>{{ rc.ROF|default('N/A') }}</p>{% endif %}</div>
+  <div class="card rc-result"><span class="rc-label result">结果 · RCL</span><h3>与现有文献一致</h3>{% if rc.RCL is iterable and rc.RCL is not string %}{% for r in rc.RCL %}<div class="list-item">{{ r }}</div>{% endfor %}{% else %}<p>{{ rc.RCL|default('N/A') }}</p>{% endif %}</div>
+  <div class="card rc-result"><span class="rc-label result">结果 · RTC</span><h3>与现有文献相反</h3>{% if rc.RTC is iterable and rc.RTC is not string %}{% for r in rc.RTC %}<div class="list-item">{{ r }}</div>{% endfor %}{% else %}<p>{{ rc.RTC|default('N/A') }}</p>{% endif %}</div>
+  <div class="card rc-conclusion"><span class="rc-label conclusion">结论 · WTDD</span><h3>他们做了什么</h3><p>{{ rc.WTDD|default('N/A') }}</p></div>
+  <div class="card rc-conclusion"><span class="rc-label conclusion">结论 · RFW</span><h3>未来建议</h3>{% if rc.RFW is iterable and rc.RFW is not string %}{% for r in rc.RFW %}<div class="list-item">{{ r }}</div>{% endfor %}{% else %}<p>{{ rc.RFW|default('N/A') }}</p>{% endif %}</div>
+</div>
+
+<!-- ========== Tab: Figure Arguments (type-branched) ========== -->
+<div id="tab-figures" class="tab-panel">
+  {% if fig_args %}
+  <div class="fig-grid">
+    {% for fig in fig_args %}
+    <div class="fig-card">
+      {% if fig._has_image and fig._page_num and page_images.get(fig._page_num) %}
+      <div class="fig-img" onclick="openLightbox(this.querySelector('img').src)">
+        <img src="data:image/png;base64,{{ page_images[fig._page_num].base64 }}" alt="{{ fig.figure_id|default('Figure') }}" loading="lazy">
+      </div>
+      {% else %}
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        {{ fig.figure_id|default('Figure') }} — {{ fig.evidence_location|default('见原文') }}
+      </div>
+      {% endif %}
+      <div class="fig-body">
+        <div class="fig-id">{{ fig.figure_id|default('Figure') }} <span class="badge badge-moderate">{{ fig.argument_role|default('') }}</span></div>
+        {% if doc_type == 'article' %}
+          <p class="mb-8"><strong>分论点：</strong>{{ fig.sub_argument|default('N/A') }}</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>{{ fig.relation_to_theme|default('N/A') }}</p>
+          <p class="mb-8"><strong>论证必要性：</strong>{{ fig.logical_necessity|default('N/A') }}</p>
+          <p class="mb-8"><strong>数据来源：</strong>{{ fig.data_source|default('N/A') }}</p>
+          <p class="mb-8"><strong>方法：</strong>{{ fig.methods_used|default('N/A') }}</p>
+          <p><strong>局限：</strong>{{ fig.weakness|default('N/A') }}</p>
+        {% elif doc_type == 'review' %}
+          <p class="mb-8"><strong>内容描述：</strong>{{ fig.content_description|default('N/A') }}</p>
+          <p class="mb-8"><strong>组织功能：</strong>{{ fig.organizational_function|default('N/A') }}</p>
+          {% if fig.covers_themes %}<p><strong>关联主题：</strong>{{ fig.covers_themes|join(', ') }}</p>{% endif %}
+        {% elif doc_type == 'benchmark' %}
+          <p class="mb-8"><strong>对比方法：</strong>{{ fig.compared_methods|default([])|join(', ') }}</p>
+          <p class="mb-8"><strong>评测维度：</strong>{{ fig.evaluation_dimension|default('N/A') }}</p>
+          <p class="mb-8"><strong>核心结论：</strong>{{ fig.key_takeaway|default('N/A') }}</p>
+          <p><strong>获胜条件：</strong>{{ fig.winner_context|default('N/A') }}</p>
+        {% elif doc_type == 'atlas' %}
+          <p class="mb-8"><strong>内容描述：</strong>{{ fig.content_description|default('N/A') }}</p>
+          <p class="mb-8"><strong>证明了什么：</strong>{{ fig.demonstrates_what|default('N/A') }}</p>
+          {% if fig.data_subset %}<p><strong>数据子集：</strong>{{ fig.data_subset }}</p>{% endif %}
+        {% elif doc_type == 'commentary' %}
+          <p class="mb-8"><strong>内容描述：</strong>{{ fig.content_description|default('N/A') }}</p>
+          <p><strong>修辞功能：</strong>{{ fig.rhetorical_function|default('N/A') }}</p>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card"><p class="text-muted">未提取到图表数据。</p></div>
+  {% endif %}
+</div>
+
+<!-- ========== Tab: Methods/Design (type-branched) ========== -->
+<div id="tab-methods" class="tab-panel">
+
+  {% if doc_type == 'article' %}
+    <!-- Article: core_methods table -->
+    <div class="section-title">核心方法流程</div>
+    {% if u.core_methods %}
+    <table>
+      <thead><tr><th>方法</th><th>工具</th><th>版本</th><th>关键参数</th><th>用途</th><th>对应结果</th><th>位置</th></tr></thead>
+      <tbody>
+      {% for m in u.core_methods %}
+      <tr>
+        <td><strong>{{ m.name|default('') }}</strong></td><td>{{ m.tool|default('') }}</td><td>{{ m.version|default('-') }}</td>
+        <td>{% if m.parameters %}{% for k,v in m.parameters.items() %}{{ k }}={{ v }}{% if not loop.last %}; {% endif %}{% endfor %}{% else %}-{% endif %}</td>
+        <td>{{ m.purpose|default('') }}</td>
+        <td>{% if m.supports_figures %}{{ m.supports_figures|join(', ') }}{% else %}-{% endif %}</td>
+        <td class="text-muted">{{ m.evidence_location|default('') }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {% if u.statistical_methods %}
+    <div class="section-title" style="margin-top:24px;">统计方法</div>
+    <table>
+      <thead><tr><th>检验</th><th>校正</th><th>阈值</th><th>场景</th></tr></thead>
+      <tbody>
+      {% for s in u.statistical_methods %}<tr><td><strong>{{ s.test|default('') }}</strong></td><td>{{ s.correction|default('-') }}</td><td>{{ s.threshold|default('-') }}</td><td>{{ s.context|default('') }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+  {% elif doc_type == 'review' %}
+    <!-- Review: methods_landscape -->
+    <div class="section-title">方法族图谱</div>
+    <p class="text-muted mb-16">综述中讨论的主要方法家族及其特点。</p>
+    {% if u.methods_landscape %}
+    {% for ml in u.methods_landscape %}
+    <div class="card" style="border-left:4px solid var(--teal);">
+      <h3>{{ ml.method_family|default('N/A') }}</h3>
+      {% if ml.representative_tools %}<p class="mb-8"><strong>代表工具：</strong>{{ ml.representative_tools|join(', ') }}</p>{% endif %}
+      <p class="mb-8"><strong>优势：</strong>{{ ml.strengths|default('') }}</p>
+      <p class="mb-8"><strong>局限：</strong>{{ ml.limitations|default('') }}</p>
+      <p><strong>最适场景：</strong>{{ ml.best_for|default('') }}</p>
+      <p class="text-muted" style="font-size:.85em;margin-top:4px;">{{ ml.evidence_location|default('') }}</p>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="card"><p class="text-muted">未提取到方法族数据。</p></div>
+    {% endif %}
+
+  {% elif doc_type == 'benchmark' %}
+    <!-- Benchmark: benchmark_design -->
+    <div class="section-title">评测设计</div>
+    {% if u.benchmark_design %}
+    <div class="card"><h3>问题定义</h3><p>{{ u.benchmark_design.problem_definition|default('N/A') }}</p></div>
+    {% if u.benchmark_design.methods_evaluated %}
+    <div class="section-title">被评测方法</div>
+    <table>
+      <thead><tr><th>方法</th><th>版本</th><th>类别</th><th>关键参数</th></tr></thead>
+      <tbody>
+      {% for m in u.benchmark_design.methods_evaluated %}
+      <tr><td><strong>{{ m.name|default('') }}</strong></td><td>{{ m.version|default('-') }}</td><td>{{ m.category|default('') }}</td><td>{{ m.key_parameters|default('-') }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {% if u.benchmark_design.datasets %}
+    <div class="section-title" style="margin-top:20px;">评测数据集</div>
+    <table>
+      <thead><tr><th>名称</th><th>来源</th><th>特征</th><th>选用理由</th></tr></thead>
+      <tbody>
+      {% for d in u.benchmark_design.datasets %}
+      <tr><td><strong>{{ d.name|default('') }}</strong></td><td>{{ d.source|default('') }}</td><td>{{ d.characteristics|default('') }}</td><td>{{ d.why_chosen|default('') }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {% if u.benchmark_design.metrics %}
+    <div class="section-title" style="margin-top:20px;">评价指标</div>
+    <table>
+      <thead><tr><th>指标</th><th>定义</th><th>衡量什么</th></tr></thead>
+      <tbody>
+      {% for m in u.benchmark_design.metrics %}
+      <tr><td><strong>{{ m.name|default('') }}</strong></td><td>{{ m.definition|default('') }}</td><td>{{ m.measures_what|default('') }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    <div class="card" style="margin-top:16px;"><h3>评测协议</h3><p>{{ u.benchmark_design.evaluation_protocol|default('N/A') }}</p></div>
+    <div class="card"><h3>Ground Truth</h3><p>{{ u.benchmark_design.ground_truth|default('N/A') }}</p></div>
+    {% endif %}
+    {% if u.methodological_insights %}
+    <div class="section-title" style="margin-top:24px;">方法学洞察</div>
+    <div class="card-grid">
+      <div class="card"><h3>关键因素</h3><p>{{ u.methodological_insights.what_matters|default('N/A') }}</p></div>
+      <div class="card"><h3>非关键因素</h3><p>{{ u.methodological_insights.what_doesnt_matter|default('N/A') }}</p></div>
+      <div class="card"><h3>参数敏感性</h3><p>{{ u.methodological_insights.parameter_sensitivity|default('N/A') }}</p></div>
+      <div class="card"><h3>计算考量</h3><p>{{ u.methodological_insights.computational_considerations|default('N/A') }}</p></div>
+    </div>
+    {% endif %}
+
+  {% elif doc_type == 'atlas' %}
+    <!-- Atlas: resource_design + annotation + accessibility -->
+    <div class="section-title">资源设计</div>
+    {% if u.resource_design %}
+    <div class="card-grid">
+      <div class="card"><h3>资源类型</h3><p>{{ u.resource_design.resource_type|default('N/A') }}</p><p class="text-muted">{{ u.resource_design.organism|default('') }} — {{ u.resource_design.tissue_or_system|default('') }}</p></div>
+      {% if u.resource_design.technology_platform %}
+      <div class="card"><h3>技术平台</h3>
+        <p class="mb-8"><strong>技术：</strong>{{ u.resource_design.technology_platform.sequencing_or_measurement|default('') }}</p>
+        <p class="mb-8"><strong>分辨率：</strong>{{ u.resource_design.technology_platform.resolution|default('') }}</p>
+        <p><strong>通量：</strong>{{ u.resource_design.technology_platform.throughput|default('') }}</p>
+      </div>
+      {% endif %}
+    </div>
+    {% if u.resource_design.sample_design %}
+    <div class="card" style="margin-top:16px;"><h3>样本设计</h3>
+      <p class="mb-8"><strong>样本数：</strong>{{ u.resource_design.sample_design.total_samples|default('') }}</p>
+      <p class="mb-8"><strong>选择标准：</strong>{{ u.resource_design.sample_design.selection_criteria|default('') }}</p>
+      <p class="mb-8"><strong>代表性：</strong>{{ u.resource_design.sample_design.representativeness|default('') }}</p>
+      <p><strong>潜在偏倚：</strong>{{ u.resource_design.sample_design.potential_biases|default('') }}</p>
+    </div>
+    {% endif %}
+    {% if u.resource_design.preprocessing_pipeline %}
+    <div class="card"><h3>预处理流程</h3>
+      <p class="mb-8"><strong>比对：</strong>{{ u.resource_design.preprocessing_pipeline.alignment|default('') }}</p>
+      <p class="mb-8"><strong>质控：</strong>{{ u.resource_design.preprocessing_pipeline.qc_filters|default('') }}</p>
+      <p class="mb-8"><strong>标准化：</strong>{{ u.resource_design.preprocessing_pipeline.normalization|default('') }}</p>
+      <p><strong>批次校正：</strong>{{ u.resource_design.preprocessing_pipeline.batch_correction|default('') }}</p>
+    </div>
+    {% endif %}
+    {% endif %}
+    {% if u.annotation_assessment %}
+    <div class="section-title" style="margin-top:24px;">注释评估</div>
+    <div class="card">
+      <p class="mb-8"><strong>策略：</strong>{{ u.annotation_assessment.annotation_strategy|default('') }}</p>
+      <p class="mb-8"><strong>分类体系：</strong>{{ u.annotation_assessment.cell_type_taxonomy|default('') }}</p>
+      <p class="mb-8"><strong>深度：</strong>{{ u.annotation_assessment.annotation_depth|default('') }}</p>
+      <p class="mb-8"><strong>验证：</strong>{{ u.annotation_assessment.validation_method|default('') }}</p>
+      <p><strong>置信度：</strong>{{ u.annotation_assessment.annotation_confidence|default('') }}</p>
+      {% if u.annotation_assessment.novel_types_discovered %}<p style="margin-top:8px;"><strong>新发现类型：</strong>{{ u.annotation_assessment.novel_types_discovered|join(', ') }}</p>{% endif %}
+    </div>
+    {% endif %}
+    {% if u.data_accessibility %}
+    <div class="section-title" style="margin-top:24px;">数据可及性</div>
+    <div class="card">
+      {% if u.data_accessibility.repositories %}<p class="mb-8"><strong>存储库：</strong>{{ u.data_accessibility.repositories|join(', ') }}</p>{% endif %}
+      {% if u.data_accessibility.accession_numbers %}<p class="mb-8"><strong>登录号：</strong>{{ u.data_accessibility.accession_numbers|join(', ') }}</p>{% endif %}
+      {% if u.data_accessibility.data_formats %}<p class="mb-8"><strong>格式：</strong>{{ u.data_accessibility.data_formats|join(', ') }}</p>{% endif %}
+      <p class="mb-8"><strong>元数据丰富度：</strong>{{ u.data_accessibility.metadata_richness|default('') }}</p>
+      <p class="mb-8"><strong>交互浏览器：</strong>{{ u.data_accessibility.interactive_browser|default('无') }}</p>
+      <p><strong>许可：</strong>{{ u.data_accessibility.license|default('未明确') }}</p>
+    </div>
+    {% endif %}
+
+  {% elif doc_type == 'commentary' %}
+    <!-- Commentary: argument structure detail -->
+    <div class="section-title">论证结构分析</div>
+    {% if u.commentary_structure %}
+    <div class="card"><h3>触发事件</h3><p>{{ u.commentary_structure.trigger|default('N/A') }}</p></div>
+    <div class="card"><h3>核心立场</h3><p>{{ u.commentary_structure.main_position|default('N/A') }}</p></div>
+    {% if u.commentary_structure.argument_chain %}
+    <div class="section-title">论证链条</div>
+    {% for step in u.commentary_structure.argument_chain %}
+    <div class="card" style="border-left:4px solid var(--purple);">
+      <span class="badge badge-moderate">步骤 {{ step.step|default('') }}</span>
+      <span class="badge badge-{{ step.evidence_type|default('logical') }}">{{ step.evidence_type|default('') }}</span>
+      <p style="margin-top:8px;"><strong>{{ step.claim|default('') }}</strong></p>
+      <p class="text-muted">{{ step.evidence|default('') }}</p>
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% if u.commentary_structure.counterarguments_acknowledged %}
+    <div class="section-title">承认的反对意见</div>
+    {% for ca in u.commentary_structure.counterarguments_acknowledged %}
+    <div class="card"><p class="mb-8"><strong>反对：</strong>{{ ca.counterargument|default('') }}</p><p class="text-muted">回应：{{ ca.author_response|default('') }}</p></div>
+    {% endfor %}
+    {% endif %}
+    <div class="card"><h3>呼吁</h3><p>{{ u.commentary_structure.call_to_action|default('N/A') }}</p></div>
+    {% endif %}
+    {% if u.context_and_stakes %}
+    <div class="section-title" style="margin-top:24px;">背景与利害</div>
+    <div class="card">
+      <p class="mb-8"><strong>领域背景：</strong>{{ u.context_and_stakes.field_context|default('') }}</p>
+      <p class="mb-8"><strong>利害攸关：</strong>{{ u.context_and_stakes.what_is_at_stake|default('') }}</p>
+      <p class="mb-8"><strong>时效性：</strong>{{ u.context_and_stakes.timeliness|default('') }}</p>
+      {% if u.context_and_stakes.related_works %}<p><strong>相关文献：</strong>{{ u.context_and_stakes.related_works|join('; ') }}</p>{% endif %}
+    </div>
+    {% endif %}
+  {% endif %}
+
+  <!-- Tools summary (universal, if present) -->
+  {% if u.tools_summary %}
+  <div class="section-title" style="margin-top:24px;">工具汇总</div>
+  <table>
+    <thead><tr><th>工具</th><th>版本</th><th>用途</th><th>链接</th></tr></thead>
+    <tbody>
+    {% for t in u.tools_summary %}
+    <tr><td><strong>{{ t.tool|default('') }}</strong></td><td>{{ t.version|default('-') }}</td><td>{{ t.purpose|default('') }}</td><td>{% if t.url_or_repo %}<a href="{{ t.url_or_repo }}" target="_blank">链接</a>{% else %}-{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+
+<!-- ========== Tab: Personalized Relevance (type-branched) ========== -->
+<div id="tab-relevance" class="tab-panel">
+  {% if u.relevance_to_user %}
+  <!-- Pain point matches (universal structure) -->
+  {% if u.relevance_to_user.pain_point_matches %}
+  <div class="section-title">痛点匹配</div>
+  {% for p in u.relevance_to_user.pain_point_matches %}
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-{{ p.actionability|default('medium') }}">{{ p.actionability|default('?') }}</span>
+      <strong style="margin-left:8px;">{{ p.user_pain_point|default('') }}</strong>
+    </div>
+    <p>{{ p.paper_addresses|default(p.resource_addresses|default('')) }}</p>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <!-- Type-specific relevance sections -->
+  {% if doc_type == 'article' %}
+    {% if u.relevance_to_user.transferable_methods %}<div class="section-title">可迁移方法</div><div class="card">{% for m in u.relevance_to_user.transferable_methods %}<div class="list-item">{{ m }}</div>{% endfor %}</div>{% endif %}
+    {% if u.relevance_to_user.novel_insights_for_user %}<div class="section-title">新颖洞见</div><div class="card">{% for n in u.relevance_to_user.novel_insights_for_user %}<div class="list-item">{{ n }}</div>{% endfor %}</div>{% endif %}
+  {% elif doc_type == 'review' %}
+    {% if u.relevance_to_user.recommended_readings %}<div class="section-title">推荐阅读</div><div class="card">{% for r in u.relevance_to_user.recommended_readings %}<div class="list-item">{{ r }}</div>{% endfor %}</div>{% endif %}
+    {% if u.relevance_to_user.method_recommendations %}<div class="section-title">方法推荐</div><div class="card">{% for m in u.relevance_to_user.method_recommendations %}<div class="list-item">{{ m }}</div>{% endfor %}</div>{% endif %}
+    {% if u.relevance_to_user.knowledge_map_value %}<div class="card" style="margin-top:16px;"><h3>知识图谱价值</h3><p>{{ u.relevance_to_user.knowledge_map_value }}</p></div>{% endif %}
+  {% elif doc_type == 'benchmark' %}
+    {% if u.relevance_to_user.directly_applicable_methods %}<div class="section-title">可直接采用的方法</div><div class="card">{% for m in u.relevance_to_user.directly_applicable_methods %}<div class="list-item">{{ m }}</div>{% endfor %}</div>{% endif %}
+    {% if u.relevance_to_user.datasets_reusable %}<div class="section-title">可复用数据集</div><div class="card">{% for d in u.relevance_to_user.datasets_reusable %}<div class="list-item">{{ d }}</div>{% endfor %}</div>{% endif %}
+    {% if u.relevance_to_user.parameter_recommendations %}<div class="card" style="margin-top:16px;"><h3>参数建议</h3><p>{{ u.relevance_to_user.parameter_recommendations }}</p></div>{% endif %}
+  {% elif doc_type == 'atlas' %}
+    {% if u.relevance_to_user.reuse_scenarios %}<div class="section-title">复用场景</div><div class="card">{% for s in u.relevance_to_user.reuse_scenarios %}<div class="list-item">{{ s }}</div>{% endfor %}</div>{% endif %}
+    {% if u.relevance_to_user.integration_with_user_data %}<div class="card" style="margin-top:16px;"><h3>数据整合建议</h3><p>{{ u.relevance_to_user.integration_with_user_data }}</p></div>{% endif %}
+    {% if u.relevance_to_user.complementary_to_user_work %}<div class="card"><h3>互补价值</h3><p>{{ u.relevance_to_user.complementary_to_user_work }}</p></div>{% endif %}
+  {% elif doc_type == 'commentary' %}
+    {% if u.relevance_to_user.perspective_value %}<div class="card" style="margin-top:16px;"><h3>视角启发</h3><p>{{ u.relevance_to_user.perspective_value }}</p></div>{% endif %}
+    {% if u.relevance_to_user.action_items %}<div class="section-title">行动事项</div><div class="card">{% for a in u.relevance_to_user.action_items %}<div class="list-item">{{ a }}</div>{% endfor %}</div>{% endif %}
+  {% endif %}
+  {% endif %}
+
+  <!-- Research Recommendations (type-branched) -->
+  {% if u.research_recommendations %}
+  <div class="section-title" style="margin-top:24px;">研究建议</div>
+  {% if doc_type == 'article' %}
+    <div class="rec-card" style="border-left-color:var(--green);"><h4>可借鉴思路</h4><div class="rec-body"><p>{{ u.research_recommendations.borrowable_ideas|default('N/A') }}</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--teal);"><h4>补充分析</h4><div class="rec-body"><p>{{ u.research_recommendations.supplementary_analyses|default('N/A') }}</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--blue);"><h4>复现路径</h4><div class="rec-body"><p>{{ u.research_recommendations.reproduction_path|default('N/A') }}</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--orange);"><h4>注意事项</h4><div class="rec-body"><p>{{ u.research_recommendations.caveats_and_limitations|default('N/A') }}</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--purple);"><h4>迁移建议</h4><div class="rec-body"><p>{{ u.research_recommendations.migration_suggestions|default('N/A') }}</p></div></div>
+  {% elif doc_type == 'review' %}
+    <div class="rec-card" style="border-left-color:var(--green);"><h4>与用户重合的知识空白</h4><div class="rec-body"><p>{{ u.research_recommendations.knowledge_gaps_for_user|default('N/A') }}</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--blue);"><h4>入门起点</h4><div class="rec-body"><p>{{ u.research_recommendations.starting_points|default('N/A') }}</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--teal);"><h4>定位建议</h4><div class="rec-body"><p>{{ u.research_recommendations.positioning_advice|default('N/A') }}</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--orange);"><h4>综述局限性</h4><div class="rec-body"><p>{{ u.research_recommendations.caveats|default('N/A') }}</p></div></div>
+  {% elif doc_type == 'benchmark' %}
+    <div class="rec-card" style="border-left-color:var(--green);"><h4>方法选型建议</h4><div class="rec-body"><p>{{ u.research_recommendations.method_selection_for_user|default('N/A') }}</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--blue);"><h4>管线集成</h4><div class="rec-body"><p>{{ u.research_recommendations.pipeline_integration|default('N/A') }}</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--orange);"><h4>遗漏评测维度</h4><div class="rec-body"><p>{{ u.research_recommendations.missing_evaluations|default('N/A') }}</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--purple);"><h4>复现路径</h4><div class="rec-body"><p>{{ u.research_recommendations.reproduction_path|default('N/A') }}</p></div></div>
+  {% elif doc_type == 'atlas' %}
+    <div class="rec-card" style="border-left-color:var(--green);"><h4>如何获取数据</h4><div class="rec-body"><p>{{ u.research_recommendations.how_to_access|default('N/A') }}</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--blue);"><h4>推荐子集</h4><div class="rec-body"><p>{{ u.research_recommendations.recommended_subset|default('N/A') }}</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--teal);"><h4>分析建议</h4><div class="rec-body"><p>{{ u.research_recommendations.analysis_suggestions|default('N/A') }}</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--purple);"><h4>整合策略</h4><div class="rec-body"><p>{{ u.research_recommendations.integration_strategy|default('N/A') }}</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--orange);"><h4>使用注意</h4><div class="rec-body"><p>{{ u.research_recommendations.caveats_for_reuse|default('N/A') }}</p></div></div>
+  {% elif doc_type == 'commentary' %}
+    <div class="rec-card" style="border-left-color:var(--green);"><h4>立场评估</h4><div class="rec-body"><p>{{ u.research_recommendations.position_assessment|default('N/A') }}</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--blue);"><h4>对在研方向的影响</h4><div class="rec-body"><p>{{ u.research_recommendations.implications_for_user_work|default('N/A') }}</p></div></div>
+    {% if u.research_recommendations.follow_up_readings %}<div class="rec-card" style="border-left-color:var(--teal);"><h4>跟进阅读</h4><div class="rec-body">{% for r in u.research_recommendations.follow_up_readings %}<div class="list-item">{{ r }}</div>{% endfor %}</div></div>{% endif %}
+  {% endif %}
+  {% endif %}
+
+  <!-- User profile snapshot -->
+  <div class="section-title" style="margin-top:24px;">用户画像快照</div>
+  <div class="card">
+    <p class="mb-8"><strong>研究领域：</strong>{{ profile.research_field|default('') }}</p>
+    <p class="mb-8"><strong>关注重点：</strong>{{ profile.focus|default('') }}</p>
+    {% if profile.pain_points %}<p><strong>当前痛点：</strong>{{ profile.pain_points|join('；') }}</p>{% endif %}
+  </div>
+</div>
+
+<!-- ========== Tab: Evidence Index (universal) ========== -->
+<div id="tab-evidence" class="tab-panel">
+  <input type="text" class="search-box" id="evidence-search" placeholder="搜索证据..." oninput="filterEvidence()">
+  <table id="evidence-table">
+    <thead><tr><th onclick="sortTable(0)">来源</th><th onclick="sortTable(1)">论断</th><th onclick="sortTable(2)">位置</th><th onclick="sortTable(3)">类型</th></tr></thead>
+    <tbody>
+    {% for f in u.key_findings|default([]) %}
+    <tr><td>主要发现</td><td>{{ f.finding|default('') }}</td><td>{{ f.evidence_location|default('') }}</td><td><span class="badge badge-{{ f.evidence_type|default('stated') }}">{{ f.evidence_type|default('') }}</span></td></tr>
+    {% endfor %}
+    {% for m in u.core_methods|default([]) %}
+    <tr><td>方法</td><td>{{ m.name|default('') }}: {{ m.purpose|default('') }}</td><td>{{ m.evidence_location|default('') }}</td><td><span class="badge badge-stated">stated</span></td></tr>
+    {% endfor %}
+    {% for fig in fig_args|default([]) %}
+    <tr><td>{{ fig.figure_id|default('Figure') }}</td><td>{{ fig.sub_argument|default(fig.content_description|default(fig.key_takeaway|default(''))) }}</td><td>{{ fig.evidence_location|default('') }}</td><td><span class="badge badge-stated">stated</span></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+</div><!-- container -->
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <img id="lightbox-img" src="" alt="Figure">
+</div>
+
+<footer>
+  Generated by Hlokk v{{ hlokk_version }} ({{ analysis_mode|default('overview') }} · {{ doc_type|default('article') }}) &nbsp;|&nbsp; {{ generated_at }} &nbsp;|&nbsp; Paper ID: {{ paper_id }}
+</footer>
+
+<script>
+/* Tab switching */
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+  });
+});
+/* Lightbox */
+function openLightbox(src){const lb=document.getElementById('lightbox');document.getElementById('lightbox-img').src=src;lb.classList.add('show');}
+function closeLightbox(){document.getElementById('lightbox').classList.remove('show');}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLightbox();});
+/* Evidence filter */
+function filterEvidence(){
+  const q=document.getElementById('evidence-search').value.toLowerCase();
+  document.querySelectorAll('#evidence-table tbody tr').forEach(tr=>{
+    tr.style.display=tr.textContent.toLowerCase().includes(q)?'':'none';
+  });
+}
+/* Table sort */
+let sortDir={};
+function sortTable(col){
+  const tb=document.querySelector('#evidence-table tbody');
+  const rows=Array.from(tb.rows);
+  sortDir[col]=!sortDir[col];
+  rows.sort((a,b)=>{
+    const at=a.cells[col].textContent,bt=b.cells[col].textContent;
+    return sortDir[col]?at.localeCompare(bt):bt.localeCompare(at);
+  });
+  rows.forEach(r=>tb.appendChild(r));
+}
+</script>
+</body>
+</html>

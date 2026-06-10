@@ -1,0 +1,43 @@
+# Hlokk API Configuration
+# Copy this file to your workspace as config.yaml.
+# API keys: set via environment variables (recommended) or fill in below.
+#   Embedding: EMBEDDING_API_KEY, EMBEDDING_BASE_URL, EMBEDDING_MODEL
+#   LLM:       HLOKK_LLM_KEY, HLOKK_LLM_URL, HLOKK_LLM_MODEL
+# Env vars take priority over values in this file.
+
+embedding:
+  # Volcengine (doubao-embedding) example:
+  #   base_url: https://ark.cn-beijing.volces.com/api/v3
+  #   model: doubao-embedding-large
+  # DashScope (text-embedding-v3) example:
+  #   base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  #   model: text-embedding-v3
+  # OpenAI example:
+  #   base_url: https://api.openai.com/v1
+  #   model: text-embedding-3-small
+  api_key: "your-embedding-api-key"
+  base_url: "https://your-embedding-provider.com/v1"
+  model: "your-embedding-model"
+
+llm:
+  # DashScope (qwen-plus/qwen-max) example:
+  #   base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  #   model: qwen-plus
+  # Volcengine (doubao-pro) example:
+  #   base_url: https://ark.cn-beijing.volces.com/api/v3
+  #   model: doubao-pro-32k
+  # OpenAI example:
+  #   base_url: https://api.openai.com/v1
+  #   model: gpt-4o
+  api_key: "your-llm-api-key"
+  base_url: "https://your-llm-provider.com/v1"
+  model: "your-llm-model"
+  max_tokens: 8192
+  temperature: 0.2
+
+# RAG settings
+rag:
+  chunk_size: 512          # tokens per chunk (for supplementary materials)
+  chunk_overlap: 64        # overlap between chunks
+  top_k: 15                # number of chunks to retrieve per query
+  collection_prefix: "hlokk"  # ChromaDB collection name prefix

@@ -1,0 +1,41 @@
+# Hlokk User Research Profile
+# Copy this file to your workspace as profile.yaml and customize.
+# This profile drives personalized literature interpretation.
+
+# --- Research Identity ---
+research_field: "your-field"           # e.g., "computer science", "economics", "neuroscience", "physics"
+research_directions:
+  - "your-primary-direction"           # e.g., "natural language processing", "behavioral economics"
+  # - "your-secondary-direction"       # e.g., "reinforcement learning", "game theory"
+
+# --- Tech Stack (tools you actively use or want to learn) ---
+tech_stack:
+  languages:
+    - "Python"
+    # - "R"
+    # - "MATLAB"
+  frameworks:
+    - "your-framework-1"              # e.g., "PyTorch", "scikit-learn", "TensorFlow"
+    # - "your-framework-2"
+  environments:
+    - "Linux"                         # e.g., "Linux HPC", "Docker", "Colab"
+    # - "Docker"
+
+# --- Current Pain Points (what's blocking your research right now) ---
+# Be specific: these keywords directly drive RAG retrieval and relevance scoring.
+pain_points:
+  - "your-current-pain-point"         # e.g., "reproducibility across benchmarks", "dataset shift"
+  # - "another-pain-point"
+
+# --- Output Preferences ---
+output_preference:
+  # Focus: conclusions | methods | reproduction | figures
+  focus: "methods"
+  # Depth: overview | standard | deep_dive
+  depth: "deep_dive"
+  # Goal: understand | reproduce | borrow_methods | write_paper
+  goal: "borrow_methods"
+
+# --- Session Override (optional, set per invocation) ---
+# Uncomment and modify to override profile for a specific session:
+# session_focus: "only look at transformer architectures"

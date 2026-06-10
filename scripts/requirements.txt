@@ -1,0 +1,10 @@
+# --- core ---
+pdfplumber>=0.10.0
+chromadb>=0.4.0
+openai>=1.0.0
+pyyaml>=6.0
+rich>=13.0.0
+PyMuPDF>=1.23.0       # figure page rendering + future OCR extension
+jinja2>=3.1.0         # interactive HTML report generation
+# --- reserved for future use ---
+tiktoken>=0.5.0       # precise token counting (v2, currently using heuristic estimator)
