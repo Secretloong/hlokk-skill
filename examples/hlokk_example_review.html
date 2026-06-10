@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hlokk — Evolutionary genetics of ageing</title>
+<style>
+:root { --bg:#f8f7f4; --card:#fff; --border:#e2dfd9; --accent:#2d5a7b; --accent2:#4a8c6f;
+  --text:#2c2c2c; --muted:#6b6b6b; --tag-bg:#eef2f7; --warn:#c0792a; --danger:#b04040;
+  --blue:#2d5a7b; --teal:#2a7a6a; --green:#4a8c6f; --orange:#c0792a; --purple:#6b5b8a; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:var(--bg); color:var(--text); line-height:1.65; font-size:15px; }
+.container { max-width:1100px; margin:0 auto; padding:16px 20px; }
+
+/* Header */
+header { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; padding:32px 0 24px; }
+header .container { display:flex; flex-direction:column; gap:8px; }
+header h1 { font-size:1.5em; font-weight:600; line-height:1.35; }
+header .meta { opacity:.85; font-size:.9em; }
+header .meta a { color:#cde; }
+header .tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+header .tag { background:rgba(255,255,255,.18); padding:2px 10px; border-radius:12px; font-size:.8em; }
+
+/* Tabs */
+.tab-bar { background:var(--card); border-bottom:2px solid var(--border); position:sticky; top:0; z-index:100; }
+.tab-bar .container { display:flex; gap:0; overflow-x:auto; }
+.tab-btn { padding:12px 18px; cursor:pointer; border:none; background:none; font-size:.9em;
+  color:var(--muted); border-bottom:3px solid transparent; white-space:nowrap; transition:.15s; }
+.tab-btn:hover { color:var(--text); }
+.tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+.tab-panel { display:none; padding:24px 0; }
+.tab-panel.active { display:block; }
+
+/* Cards */
+.card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:20px; margin-bottom:16px; }
+.card h3 { font-size:1.05em; margin-bottom:10px; color:var(--accent); }
+.card-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; }
+
+/* Reading cipher colors */
+.rc-intro { border-left:4px solid var(--blue); }
+.rc-review { border-left:4px solid var(--teal); }
+.rc-result { border-left:4px solid var(--green); }
+.rc-conclusion { border-left:4px solid var(--orange); }
+.rc-label { display:inline-block; font-weight:700; font-size:.8em; padding:2px 8px;
+  border-radius:4px; margin-bottom:6px; color:#fff; }
+.rc-label.intro { background:var(--blue); }
+.rc-label.review { background:var(--teal); }
+.rc-label.result { background:var(--green); }
+.rc-label.conclusion { background:var(--orange); }
+
+/* Tables */
+table { width:100%; border-collapse:collapse; font-size:.9em; }
+th { background:var(--tag-bg); text-align:left; padding:10px 12px; font-weight:600;
+  border-bottom:2px solid var(--border); position:sticky; top:52px; z-index:5; cursor:pointer; }
+th:hover { background:#dde4ed; }
+td { padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+tr:hover td { background:#faf9f6; }
+
+/* Strength badges */
+.badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:.78em; font-weight:600; }
+.badge-strong { background:#d4edda; color:#155724; }
+.badge-moderate { background:#fff3cd; color:#856404; }
+.badge-weak { background:#f8d7da; color:#721c24; }
+.badge-high { background:#d4edda; color:#155724; }
+.badge-medium { background:#fff3cd; color:#856404; }
+.badge-low { background:#f8d7da; color:#721c24; }
+.badge-stated { background:#d4edda; color:#155724; }
+.badge-inferred { background:#e2d6f3; color:#4a2d7a; }
+
+/* Figures */
+.fig-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(480px,1fr)); gap:20px; }
+.fig-card { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:var(--card); }
+.fig-card .fig-img { background:#f0eeeb; text-align:center; cursor:pointer; max-height:400px; overflow:hidden; }
+.fig-card .fig-img img { width:100%; display:block; object-fit:contain; }
+.fig-card .fig-body { padding:16px; }
+.fig-card .fig-id { font-weight:700; color:var(--accent); margin-bottom:6px; }
+
+/* Collapsible */
+.collapsible { cursor:pointer; user-select:none; }
+.collapsible::after { content:" ▼"; font-size:.7em; color:var(--muted); }
+.collapsible.collapsed::after { content:" ▶"; }
+.coll-body { overflow:hidden; transition:max-height .3s ease; }
+.coll-body.collapsed { max-height:0 !important; }
+
+/* Lightbox */
+.lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:1000;
+  align-items:center; justify-content:center; cursor:pointer; }
+.lightbox.show { display:flex; }
+.lightbox img { max-width:95vw; max-height:95vh; border-radius:4px; }
+
+/* Search */
+.search-box { padding:8px 14px; border:1px solid var(--border); border-radius:8px; width:100%;
+  max-width:400px; margin-bottom:16px; font-size:.9em; }
+
+/* Misc */
+.section-title { font-size:1.15em; font-weight:600; margin:0 0 16px 0; color:var(--text); }
+.text-muted { color:var(--muted); }
+.mb-8 { margin-bottom:8px; }
+.mb-16 { margin-bottom:16px; }
+.list-item { padding:8px 0; border-bottom:1px solid var(--border); }
+.list-item:last-child { border-bottom:none; }
+footer { text-align:center; padding:24px; color:var(--muted); font-size:.82em; }
+
+/* Literature Report */
+.report-section { margin-bottom:28px; }
+.report-section h3 { font-size:1.1em; font-weight:600; color:var(--accent); margin-bottom:10px;
+  padding-bottom:6px; border-bottom:2px solid var(--border); }
+.report-section .report-body { font-size:.95em; line-height:1.8; color:var(--text); }
+.report-section .report-body p { margin-bottom:12px; text-indent:2em; }
+.report-label { display:inline-block; font-weight:700; font-size:.75em; padding:2px 10px;
+  border-radius:4px; margin-bottom:8px; color:#fff; letter-spacing:.5px; }
+.report-label.theme { background:var(--blue); }
+.report-label.review { background:var(--teal); }
+.report-label.gap { background:#8b6bb0; }
+.report-label.result { background:var(--green); }
+.report-label.innovation { background:var(--orange); }
+.report-label.method { background:#5a7a8c; }
+.report-label.strategy { background:#8b5a5a; }
+.report-label.recommend { background:#5a6b8c; }
+.report-divider { border:none; border-top:1px dashed var(--border); margin:24px 0; }
+
+/* Research Recommendations & Reading Strategy */
+.rec-card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:20px; margin-bottom:16px; border-left:4px solid var(--accent); }
+.rec-card h4 { font-size:1em; font-weight:600; color:var(--accent); margin-bottom:8px; }
+.rec-card .rec-body { font-size:.95em; line-height:1.8; color:var(--text); }
+.strategy-card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:20px; margin-bottom:16px; }
+.strategy-card .strategy-tag { display:inline-block; font-weight:700; font-size:.8em;
+  padding:3px 10px; border-radius:4px; color:#fff; margin-right:8px; margin-bottom:8px; }
+.strategy-tag.poc { background:#b04040; }
+.strategy-tag.mop { background:#c0792a; }
+.strategy-tag.rpp { background:#6b5b8a; }
+.strategy-tag.wil { background:#2a7a6a; }
+
+/* Research Threads tree */
+.thread-card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:20px; margin-bottom:16px; border-left:4px solid var(--accent); }
+.thread-card h4 { font-size:1.05em; font-weight:600; color:var(--accent); margin-bottom:12px; cursor:pointer; }
+.thread-card h4::after { content:" ▼"; font-size:.65em; color:var(--muted); }
+.sub-q { margin-left:16px; padding:10px 0; border-bottom:1px solid var(--border); }
+.sub-q:last-child { border-bottom:none; }
+.sub-q-title { font-weight:600; font-size:.95em; margin-bottom:6px; cursor:pointer; }
+.sub-q-title::after { content:" ▼"; font-size:.6em; color:var(--muted); }
+.evidence-pt { margin-left:24px; padding:6px 0; font-size:.9em; }
+.evidence-pt .ev-loc { color:var(--muted); font-size:.82em; }
+
+/* Mode badge */
+.mode-badge { display:inline-block; padding:3px 10px; border-radius:12px;
+  font-size:.75em; font-weight:600; color:#fff; margin-left:8px; }
+.mode-badge.overview { background:var(--teal); }
+.mode-badge.detailed { background:var(--purple); }
+
+/* Doc type badge */
+.dtype-badge { display:inline-block; padding:3px 10px; border-radius:12px;
+  font-size:.75em; font-weight:600; color:#fff; margin-left:8px; }
+.dtype-badge.article { background:var(--blue); }
+.dtype-badge.review { background:var(--teal); }
+.dtype-badge.benchmark { background:var(--orange); }
+.dtype-badge.atlas { background:var(--green); }
+.dtype-badge.commentary { background:var(--purple); }
+
+/* Debate cards */
+.debate-card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:16px; margin-bottom:12px; }
+.debate-card .camp { display:inline-block; padding:2px 8px; border-radius:4px; font-size:.82em; font-weight:600; }
+.camp-a { background:#e8f4fd; color:#1a5276; }
+.camp-b { background:#fde8e8; color:#761a1a; }
+
+@media(max-width:640px) { .fig-grid,.card-grid { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+<div class="container">
+  <h1>Evolutionary genetics of ageing
+    <span class="mode-badge detailed">detailed</span>
+    <span class="dtype-badge review">review</span>
+  </h1>
+  <div class="meta">
+    Handan Melike Dönertaş & Linda Partridge &nbsp;|&nbsp; Nature Reviews Genetics, 2024
+    
+  </div>
+  <div class="tags">
+    <span class="tag">GWAS</span><span class="tag">comparative genomics</span><span class="tag">multi-omics</span><span class="tag">DNA methylation</span><span class="tag">transcriptomics</span>
+    <span class="tag">聚焦：methods</span>
+    
+  </div>
+</div>
+</header>
+
+<!-- Tab Bar (type-aware labels) -->
+<div class="tab-bar"><div class="container">
+  <button class="tab-btn active" data-tab="overview">概览</button>
+  <button class="tab-btn" data-tab="report">文献阅读汇报</button>
+  <button class="tab-btn" data-tab="cipher">阅读密码</button>
+  <button class="tab-btn" data-tab="figures">图表组织</button>
+  <button class="tab-btn" data-tab="methods">方法族图谱</button>
+  <button class="tab-btn" data-tab="relevance">个性化解读</button>
+  <button class="tab-btn" data-tab="evidence">证据索引</button>
+</div></div>
+
+<div class="container">
+
+<!-- ========== Tab 1: Overview ========== -->
+<div id="tab-overview" class="tab-panel active">
+  <div class="card">
+    <h3>综述目标</h3>
+    <p>本文旨在探讨衰老为何在进化中产生、在不同物种和个体间如何变异，以及如何通过整合进化遗传学与分子机制来指导健康寿命（healthspan）的延长。</p>
+  </div>
+  <div class="card-grid">
+    <div class="card">
+      <h3>数据与设计</h3>
+      <p class="mb-8"><strong>数据类型：</strong>GWAS, comparative genomics, multi-omics, DNA methylation, transcriptomics</p>
+      <p class="mb-8"><strong>样本信息：</strong>跨物种（人类、小鼠、果蝇、线虫、裸鼹鼠、弓头鲸、石斑鱼等），人类队列（UK Biobank等），涵盖多组织、单细胞及群体水平数据。</p>
+      <p><strong>实验设计：</strong>系统性文献综述（Review article），整合群体遗传学、比较基因组学、多组学及进化发育生物学证据，构建衰老进化遗传学的理论验证框架。</p>
+    </div>
+    <div class="card">
+      <h3>数据与代码</h3>
+      <p class="mb-8"><strong>数据可用性：</strong>Open Genes database, GenAge, AnAge database, TimeTree, UK Biobank</p>
+      <p><strong>代码可用性：</strong>未提及</p>
+    </div>
+  </div>
+
+  <!-- Key Findings (universal) -->
+  <div class="section-title">主要发现</div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-strong">strong</span>
+      <span class="badge badge-stated">stated</span>
+      <span class="text-muted" style="font-size:.82em;margin-left:8px;">page 5 / Figure 2</span>
+    </div>
+    <p>衰老的12个标志（hallmarks of ageing）相关基因表现出显著的进化保守性（序列一致性高于背景5-11%），表明衰老并非程序化过程，而是早期生命优化通路在自然选择“阴影（selection shadow）”下的多效性代价。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-strong">strong</span>
+      <span class="badge badge-stated">stated</span>
+      <span class="text-muted" style="font-size:.82em;margin-left:8px;">page 2 / Section: Antagonistic pleiotropy</span>
+    </div>
+    <p>人类基因组学研究证实了拮抗多效性（antagonistic pleiotropy）理论，生殖特征的多基因评分（polygenic scores）与存活至76岁的概率呈显著负相关，且拮抗多效性变异的数量几乎是协同变异的四倍。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-strong">strong</span>
+      <span class="badge badge-stated">stated</span>
+      <span class="text-muted" style="font-size:.82em;margin-left:8px;">page 7 / Section: Molecular correlates of lifespan variation</span>
+    </div>
+    <p>跨物种比较基因组学（comparative genomics）显示，体细胞突变率与寿命呈负相关（16种哺乳动物中），且长寿物种在DNA修复、蛋白质稳态和免疫调节等保守通路上表现出更强的纯化选择（purifying selection）或趋同进化（convergent evolution）。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-moderate">moderate</span>
+      <span class="badge badge-stated">stated</span>
+      <span class="text-muted" style="font-size:.82em;margin-left:8px;">page 6 / Section: Cross-species biomarkers of ageing</span>
+    </div>
+    <p>炎症衰老（inflammageing）并非普遍的衰老标志，而是高度依赖于工业化环境的兼性反应，野生非人灵长类和部分长寿哺乳动物（如盲鼹鼠）并未表现出该特征。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-strong">strong</span>
+      <span class="badge badge-stated">stated</span>
+      <span class="text-muted" style="font-size:.82em;margin-left:8px;">page 6 / Section: Cross-species biomarkers of ageing</span>
+    </div>
+    <p>表观遗传时钟（epigenetic clocks）在跨物种间具有高度可转移性，其年龄依赖性的DNA甲基化增益约90%发生在受强纯化选择的Polycomb抑制复合物2（PRC2）调控区域，反映了发育程序在衰老过程中的持续作用。</p>
+  </div>
+  
+
+  <!-- Type-specific overview sections -->
+  
+    <!-- Thematic Threads (review) -->
+    
+    <div class="section-title">主题线索</div>
+    <p class="text-muted mb-16">综述按主题组织的知识结构，每个主题追踪其演进和开放问题。</p>
+    
+    <div class="thread-card">
+      <h4 onclick="this.parentElement.querySelector('.thread-body').classList.toggle('collapsed')">
+        <span class="badge badge-moderate">#1</span>
+        经典进化衰老理论的基因组学验证
+      </h4>
+      <div class="thread-body">
+        <p class="mb-8"><strong>范围：</strong>深入探讨突变积累（Mutation accumulation, MA）与拮抗多效性（Antagonistic pleiotropy, AP）理论，并系统映射这两种理论在人类GWAS、等位基因频率分布及纯化选择强度上的基因组学特征。</p>
+        <p class="mb-8"><strong>演进：</strong>从早期基于人口统计学的数学模型推导，演进为利用大规模生物样本库（如UK Biobank）和多基因评分（Polygenic scores, PGS）进行实证检验，证实了生殖与寿命之间的负遗传相关。</p>
+        <p class="mb-8"><strong>当前水平：</strong>学界普遍接受自然选择随年龄减弱（Selection shadow）的核心前提，且人类基因组数据强烈支持AP在复杂疾病遗传架构中的主导作用。</p>
+        
+        <p class="mb-8"><strong>开放问题：</strong></p>
+        <p>MA与AP在不同生态和人口背景下的相对贡献比例；年龄依赖性基因表达变化的组织特异性与细胞自主性区分。</p>
+        
+        
+        <p class="text-muted" style="margin-top:8px;font-size:.85em;">关键引用：Hamilton, 1966; Williams, 1957; Medawar, 1952; Byars et al., 2017; Timmers et al., 2020</p>
+        
+      </div>
+    </div>
+    
+    <div class="thread-card">
+      <h4 onclick="this.parentElement.querySelector('.thread-body').classList.toggle('collapsed')">
+        <span class="badge badge-moderate">#2</span>
+        衰老标志与长寿通路的进化保守性
+      </h4>
+      <div class="thread-body">
+        <p class="mb-8"><strong>范围：</strong>分析衰老的12个标志（Hallmarks of ageing）及长寿相关基因（GenAge）在进化上的序列保守性，探讨公共机制（Public mechanisms）与私人机制（Private mechanisms）的平衡。</p>
+        <p class="mb-8"><strong>演进：</strong>从最初认为衰老是物种特异性的损伤积累，转变为发现IGF-1、mTOR等营养感应与蛋白质稳态通路在从线虫到哺乳动物中的高度保守性。</p>
+        <p class="mb-8"><strong>当前水平：</strong>确认核心衰老通路受强纯化选择（Purifying selection）约束，其保守性源于早期生命发育与生长的多效性需求，而非为了长寿本身。</p>
+        
+        <p class="mb-8"><strong>开放问题：</strong></p>
+        <p>慢性炎症（Inflammageing）是否应被视为普遍的衰老标志，还是特定环境下的兼性反应。</p>
+        
+        
+        <p class="text-muted" style="margin-top:8px;font-size:.85em;">关键引用：López-Otín et al., 2013/2023; de Magalhães et al., 2009; Kowald et al., 2020</p>
+        
+      </div>
+    </div>
+    
+    <div class="thread-card">
+      <h4 onclick="this.parentElement.querySelector('.thread-body').classList.toggle('collapsed')">
+        <span class="badge badge-moderate">#3</span>
+        跨物种寿命变异的分子基础与系统发育比较
+      </h4>
+      <div class="thread-body">
+        <p class="mb-8"><strong>范围：</strong>利用系统发育比较方法（Phylogenetic comparative methods）解析脊椎动物寿命百倍差异的分子机制，包括体细胞突变率、DNA修复及肿瘤抑制通路的趋同进化。</p>
+        <p class="mb-8"><strong>演进：</strong>从单一模式生物的寿命干预，扩展到利用系统发育广义最小二乘法（PGLS）和趋同进化分析，在数百个物种中寻找与寿命相关的分子特征。</p>
+        <p class="mb-8"><strong>当前水平：</strong>确立了体细胞突变率与寿命的负相关关系，并发现长寿物种在DNA修复和免疫调节通路上存在显著的趋同进化信号。</p>
+        
+        <p class="mb-8"><strong>开放问题：</strong></p>
+        <p>体细胞突变积累是直接驱动机体衰老，还是主要通过癌症风险限制寿命；如何更好地区分谱系特异性适应与共享的进化解决方案。</p>
+        
+        
+        <p class="text-muted" style="margin-top:8px;font-size:.85em;">关键引用：Cagan et al., 2022; Seluanov et al., 2018; Kowalczyk et al., 2020</p>
+        
+      </div>
+    </div>
+    
+    <div class="thread-card">
+      <h4 onclick="this.parentElement.querySelector('.thread-body').classList.toggle('collapsed')">
+        <span class="badge badge-moderate">#4</span>
+        多组学生物标志物与表观遗传时钟的进化解析
+      </h4>
+      <div class="thread-body">
+        <p class="mb-8"><strong>范围：</strong>评估DNA甲基化时钟（DNA methylation clocks）等跨物种生物标志物的有效性，并从进化发育生物学（Evo-Devo）角度解析其背后的生物学意义。</p>
+        <p class="mb-8"><strong>演进：</strong>从人类单一组织的年龄预测工具，发展为跨哺乳动物物种、跨组织的高精度泛哺乳动物时钟，并开始探讨其与发育程序（如PRC2调控）的联系。</p>
+        <p class="mb-8"><strong>当前水平：</strong>表观遗传时钟是目前最稳健的跨物种衰老生物标志物，但其信号可能混淆了发育编程的延续与真正的衰老损伤。</p>
+        
+        <p class="mb-8"><strong>开放问题：</strong></p>
+        <p>如何构建区分损伤驱动与适应性变化的因果富集时钟（Causality-enriched clocks）；如何剥离成熟前的发育信号。</p>
+        
+        
+        <p class="text-muted" style="margin-top:8px;font-size:.85em;">关键引用：Horvath, 2013; Lu et al., 2023; Thompson et al., 2023</p>
+        
+      </div>
+    </div>
+    
+    
+
+    <!-- Consensus & Debate (review) -->
+    
+    <div class="section-title">领域共识与争议</div>
+    
+    <p class="text-muted mb-8">共识</p>
+    
+    <div class="card"><span class="badge badge-strong">strong</span> 自然选择强度随成年期年龄增长而减弱（选择阴影），这是衰老进化的根本前提。</div>
+    
+    <div class="card"><span class="badge badge-strong">strong</span> 核心长寿调节通路（如营养感应、蛋白质稳态）在进化上高度保守，反映了早期生命功能的拮抗多效性约束。</div>
+    
+    <div class="card"><span class="badge badge-strong">strong</span> 在人类复杂疾病和衰老的遗传架构中，拮抗多效性（AP）的作用远大于单纯的突变积累（MA）。</div>
+    
+    
+    
+    <p class="text-muted mb-8" style="margin-top:16px;">争议</p>
+    
+    <div class="debate-card">
+      <p class="mb-8"><strong>程序化衰老（群体选择）与个体水平选择（MA/AP）的有效性。</strong></p>
+      <span class="camp camp-a">A: 群体选择支持者认为衰老是适应性的程序化过程，保守通路是其证据。</span>
+      <span class="camp camp-b">B: 经典进化遗传学家（本文作者）认为群体选择覆盖个体选择的条件在自然界极罕见，保守通路是AP的结果而非衰老程序。</span>
+      <p class="text-muted" style="margin-top:6px;font-size:.85em;">状态：resolved</p>
+    </div>
+    
+    <div class="debate-card">
+      <p class="mb-8"><strong>炎症衰老（Inflammageing）是否为普遍的衰老核心标志。</strong></p>
+      <span class="camp camp-a">A: 传统老年科学观点将其列为核心标志，认为慢性炎症驱动全身衰老。</span>
+      <span class="camp camp-b">B: 本文及跨物种生态学研究指出，野生灵长类和部分长寿哺乳动物无此特征，认为它是工业化环境错配引发的兼性反应。</span>
+      <p class="text-muted" style="margin-top:6px;font-size:.85em;">状态：emerging</p>
+    </div>
+    
+    <div class="debate-card">
+      <p class="mb-8"><strong>体细胞突变积累在机体衰老中的直接因果作用。</strong></p>
+      <span class="camp camp-a">A: 部分学者认为体细胞突变负荷直接导致组织功能衰退和机体衰老。</span>
+      <span class="camp camp-b">B: 另一派认为体细胞突变主要通过增加癌症风险（Neoplasia）来限制寿命，而非直接驱动非癌症的衰老表型。</span>
+      <p class="text-muted" style="margin-top:6px;font-size:.85em;">状态：ongoing</p>
+    </div>
+    
+    
+    
+
+  
+
+  <!-- Limitations (universal) -->
+  
+  
+  
+</div>
+
+<!-- ========== Tab: Literature Reading Report ========== -->
+<div id="tab-report" class="tab-panel">
+  
+
+  
+  <p class="text-muted mb-16">综述文献的结构化阅读汇报：主题综合、方法对比、空白综述与领域展望。</p>
+  <div class="report-section"><span class="report-label theme">综述主题</span><h3>主题与动机</h3><div class="report-body"><p>本综述聚焦于衰老的进化遗传学，探讨了为何自然选择未能消除衰老，以及衰老在不同物种和个体间表现出巨大变异的深层机制。现代人类寿命的显著延长使得我们暴露出在自然选择“阴影（Selection shadow）”下积累的晚期有害表型。文章指出，仅靠分子机制无法完全解释衰老，必须将其置于进化框架中，理解早期生命适应性状如何在晚期产生多效性代价。
+
+衰老并非程序化的必然结果，而是突变积累（Mutation accumulation, MA）和拮抗多效性（Antagonistic pleiotropy, AP）共同作用的副产物。随着比较基因组学、大规模人类GWAS和多组学技术的发展，该领域正从理论推导迈向数据驱动的实证检验阶段。本文旨在整合这些多维度的证据，构建一个从进化理论到分子机制的完整知识图谱。</p></div></div>
+  <div class="report-section"><span class="report-label review">覆盖范围</span><h3>综述范围与方法</h3><div class="report-body"><p>本文是一篇叙述性综述（Narrative review），覆盖了从20世纪中叶的经典进化理论到2020年代最新的多组学和群体遗传学研究。纳入的文献涵盖了无脊椎动物、哺乳动物模型以及人类大型生物样本库（如UK Biobank）的数据。
+
+作者采用了主题与方法论相结合的叙事结构，首先梳理理论框架，随后评估用于测试这些理论的基因组学工具，最后探讨跨物种和人类群体中的变异模式。文章特别强调了系统发育校正和多组学因果推断在区分相关性与机制中的关键作用。</p></div></div>
+  <hr class="report-divider">
+  <div class="report-section"><span class="report-label result">主题综合</span><h3>领域知识体系综合叙述</h3><div class="report-body"><p>在经典理论验证方面，文章通过Table 1系统映射了MA和AP的基因组学特征。人类GWAS和多基因评分（PGS）分析提供了AP的强有力证据：生殖特征的多基因评分与存活率呈显著负相关，且拮抗多效性变异在衰老相关基因中占据主导。这表明人类复杂疾病的遗传架构深深植根于早期的生殖适应性权衡。
+
+关于衰老标志的保守性，作者通过量化分析发现，12个衰老标志相关基因及GenAge长寿基因集在人类与小鼠间表现出显著高于背景的序列一致性。这种保守性并非为了“长寿”本身，而是因为这些通路（如mTOR、IGF-1）在发育和早期生长中不可或缺。这直接反驳了程序化衰老理论，支持了衰老是早期优化通路在晚期失控的“准程序（Quasi-programmes）”假说。
+
+在跨物种变异方面，综述强调了系统发育比较方法（如PGLS）的重要性。体细胞突变率与寿命的负相关，以及长寿物种在DNA修复和肿瘤抑制通路上的趋同进化，揭示了生命之树中解决长寿问题的“公共机制”与“私人机制”的交织。例如，裸鼹鼠和弓头鲸通过不同的分子创新实现了极端的寿命延长，但均靶向核心的保守网络。
+
+在生物标志物领域，表观遗传时钟（DNA methylation clocks）被确立为最稳健的跨物种衰老度量。然而，作者敏锐地指出，约90%的年龄依赖性甲基化变化发生在受强纯化选择的PRC2调控区域，这暗示时钟可能更多反映了发育程序的持续活动，而非纯粹的损伤积累。此外，文章挑战了“炎症衰老（Inflammageing）”的普遍性，指出其主要局限于工业化环境，在野生种群中并不普遍。</p></div></div>
+  <div class="report-section"><span class="report-label method">方法对比</span><h3>不同方法/观点的对比评价</h3><div class="report-body"><p>文章对MA和AP的相对贡献进行了辩证分析。数学模型和生态数据表明，在高外源死亡率和种群较小的环境中，MA占主导；而在低外源死亡率的大型种群中，AP更为重要。这种生态依赖性解释了为何不同物种和人类不同历史时期的衰老遗传架构存在差异。
+
+在方法论层面，作者对比了趋同进化分析与大规模PGLS回归。前者适用于在少数系统发育控制的物种中寻找精确的序列变异，后者则擅长在数百个物种的多组学数据中识别连续的分子特征与寿命的相关性。作者警告，缺乏系统发育校正的比较研究极易产生假阳性。
+
+对于衰老干预，文章对比了实验室环境与野生环境的差异。饮食限制和mTOR抑制在实验室（ad libitum、无压力）条件下效果显著，但这可能只是将生物体恢复到更接近其祖先的生理状态。这种环境错配（Environmental mismatch）视角为理解干预效果的异质性提供了进化解释。</p></div></div>
+  <hr class="report-divider">
+  <div class="report-section"><span class="report-label gap">研究空白</span><h3>综合研究空白</h3><div class="report-body"><p>综述识别出几个关键的研究空白。首先是系统发育校正的缺失，许多跨物种多组学研究未能充分控制共享祖先效应，导致难以区分真正的适应性进化与系统发育惯性。其次是生物标志物的特异性问题，现有的表观遗传时钟和bulk转录组学数据难以剥离发育编程信号、细胞组成变化与真正的细胞自主性衰老损伤。
+
+此外，环境背景的忽视是一个重大盲区。大多数机制研究基于高度人工化的实验室或工业化人类队列，忽略了野生环境下的自然选择压力和免疫/代谢权衡，这可能导致对某些衰老标志（如慢性炎症）的过度泛化。</p></div></div>
+  <div class="report-section"><span class="report-label innovation">未来展望</span><h3>领域发展展望</h3><div class="report-body"><p>未来研究必须向因果推断和精细化分辨率迈进。作者呼吁开发“因果富集（Causality-enriched）”的表观遗传时钟，结合孟德尔随机化等方法，区分导致衰老的损伤性甲基化变化与作为代偿反应的适应性变化。同时，将时钟训练限制在成熟后阶段，以净化发育信号。
+
+在跨物种层面，需要构建包含更广泛生态位和野生种群的多组学图谱，并严格应用系统发育比较方法。单细胞和空间多组学技术的应用将有助于解析组织微环境中的进化权衡，揭示细胞间通讯改变在衰老中的因果作用。</p></div></div>
+  <div class="report-section"><span class="report-label theme">领域贡献</span><h3>该综述对领域的贡献和意义</h3><div class="report-body"><p>本综述为衰老生物学和进化遗传学提供了一个急需的整合框架。它不仅澄清了长期存在的理论争议（如程序化衰老的谬误、炎症衰老的局限性），还为利用现代基因组学工具测试进化预测提供了标准化的方法学指南。这对于指导老年科学（Geroscience）的靶点发现和精准医疗具有深远的理论意义。</p></div></div>
+
+  
+
+  
+
+  <!-- Reading Strategy (universal, QoderWork-generated) -->
+  
+</div>
+
+<!-- ========== Tab: Reading Cipher (universal) ========== -->
+<div id="tab-cipher" class="tab-panel">
+  <p class="text-muted mb-16">学术论文叙事结构解码：从前言到结论的完整论证链路。</p>
+  <div class="card rc-intro"><span class="rc-label intro">前言 · WTD</span><h3>他们要做什么</h3><p>本综述旨在整合进化遗传学与分子机制，阐明衰老为何在进化中产生、在不同物种和个体间如何变异，并评估现代基因组学和多组学技术如何用于严格测试进化预测。</p></div>
+  <div class="card rc-review"><span class="rc-label review">综述 · SPL</span><h3>现有文献综述</h3><p>经典的进化遗传学理论（如突变积累和拮抗多效性）为理解衰老的遗传架构提供了基础框架，指出自然选择随年龄增长而减弱，导致晚期有害突变积累或早期有益等位基因被保留。</p></div>
+  <div class="card rc-review"><span class="rc-label review">综述 · CPL</span><h3>现有文献批评</h3><p>仅靠分子机制分析无法解释衰老的进化原因；此外，过去的跨物种比较研究通常缺乏足够的系统发育校正（phylogenetic correction），难以区分谱系特异性适应与共享的进化解决方案。</p></div>
+  <div class="card rc-review"><span class="rc-label review">综述 · GAP</span><h3>研究空白</h3><p>缺乏一个系统性框架，将经典的进化理论与现代比较基因组学、大规模人类遗传学研究（如GWAS）及多组学衰老生物标志物相结合，以在分子层面验证进化预测。</p></div>
+  <div class="card rc-review"><span class="rc-label review">综述 · RAT</span><h3>理论依据</h3><p>现代人类寿命的大幅延长暴露了自然选择未能优化的晚期生命分子通路，亟需通过进化视角来解析长寿和晚期疾病风险的遗传基础，从而为老年科学（geroscience）提供理论指导。</p></div>
+  <div class="card rc-result"><span class="rc-label result">结果 · ROF</span><h3>研究结果</h3><div class="list-item">构建了测试突变积累与拮抗多效性的基因组学特征框架（Table 1），明确了等位基因频率、遗传相关性、纯化选择强度等维度的验证方法。</div><div class="list-item">证实了衰老标志（hallmarks of ageing）和长寿相关基因（GenAge）在进化上的高度保守性，支持了衰老是早期生命优化通路多效性代价的观点。</div><div class="list-item">揭示了跨物种寿命变异的分子基础，包括体细胞突变率与寿命的负相关，以及长寿物种在DNA修复和肿瘤抑制通路上的趋同进化。</div><div class="list-item">指出炎症衰老（inflammageing）是环境依赖性的而非普遍的衰老标志，修正了将其视为核心衰老机制的普遍认知。</div></div>
+  <div class="card rc-result"><span class="rc-label result">结果 · RCL</span><h3>与现有文献一致</h3><div class="list-item">人类GWAS和多基因评分分析证实了生殖与寿命之间的负遗传相关，与拮抗多效性理论的预测高度一致。</div><div class="list-item">跨物种干预实验（如饮食限制、mTOR通路抑制）延长寿命的效果，印证了营养感应和蛋白质稳态通路在衰老中的保守作用。</div></div>
+  <div class="card rc-result"><span class="rc-label result">结果 · RTC</span><h3>与现有文献相反</h3><div class="list-item">与‘炎症衰老是普遍衰老标志’的观点相反，跨群体和跨物种分析表明，慢性炎症特征主要局限于工业化环境，野生环境下的长寿物种并未表现出此特征。</div><div class="list-item">与‘衰老是程序化过程’的群体选择理论相反，系统性评估表明群体选择 override 个体选择的条件在自然界中极少成立，衰老更可能是突变积累和拮抗多效性的结果。</div></div>
+  <div class="card rc-conclusion"><span class="rc-label conclusion">结论 · WTDD</span><h3>他们做了什么</h3><p>系统综述了衰老的进化遗传学，提出了一个从经典理论到多组学验证的知识体系，绘制了衰老标志的进化保守性图谱，并总结了跨物种和人类群体中衰老变异的基因组学证据。</p></div>
+  <div class="card rc-conclusion"><span class="rc-label conclusion">结论 · RFW</span><h3>未来建议</h3><div class="list-item">建议开发‘因果富集（causality-enriched）’的表观遗传时钟，以区分损伤驱动的变化与适应性变化，从而更精确地测试进化预测。</div><div class="list-item">建议将表观遗传时钟的训练数据限制在成熟后年龄，以更好地分离发育编程信号与真正的衰老过程。</div><div class="list-item">呼吁在未来的比较基因组学研究中纳入更严格的系统发育校正，以准确区分谱系特异性适应与共享的长寿机制。</div></div>
+</div>
+
+<!-- ========== Tab: Figure Arguments (type-branched) ========== -->
+<div id="tab-figures" class="tab-panel">
+  
+  <div class="fig-grid">
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Figure 1 — page 3
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Figure 1 <span class="badge badge-moderate">conceptual_overview</span></div>
+        
+          <p class="mb-8"><strong>内容描述：</strong>展示选择阴影（Selection shadow）的概念模型（图1a）以及基于人类人口统计学数据计算的前/后人口转变时期的自然选择强度随年龄下降的曲线（图1b）。</p>
+          <p class="mb-8"><strong>组织功能：</strong>为全文奠定理论基石，直观解释为何自然选择无法清除晚期有害突变或保留早期有益但晚期有害的等位基因。</p>
+          <p><strong>关联主题：</strong>经典进化衰老理论的基因组学验证</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Figure 2 — page 5
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Figure 2 <span class="badge badge-moderate">data_summary</span></div>
+        
+          <p class="mb-8"><strong>内容描述：</strong>量化衰老的12个标志相关基因及GenAge长寿基因集的人类-小鼠氨基酸序列一致性，并与背景基因集进行置换检验对比。</p>
+          <p class="mb-8"><strong>组织功能：</strong>提供统计学证据，反驳衰老机制完全是物种特异性的观点，证实核心衰老通路受强纯化选择约束。</p>
+          <p><strong>关联主题：</strong>衰老标志与长寿通路的进化保守性</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Figure 3 — page 8
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Figure 3 <span class="badge badge-moderate">workflow_summary</span></div>
+        
+          <p class="mb-8"><strong>内容描述：</strong>展示脊椎动物最大寿命的系统发育分布（图3a），并对比趋同进化分析与大规模系统发育比较方法（PGLS）的工作流程（图3b）。</p>
+          <p class="mb-8"><strong>组织功能：</strong>指导读者如何正确应用系统发育比较方法，强调在跨物种多组学分析中控制共享祖先效应的必要性。</p>
+          <p><strong>关联主题：</strong>跨物种寿命变异的分子基础与系统发育比较</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Table 1 — page 4
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Table 1 <span class="badge badge-moderate">comparison_table</span></div>
+        
+          <p class="mb-8"><strong>内容描述：</strong>系统对比突变积累（MA）与拮抗多效性（AP）在等位基因频率、遗传架构、纯化选择强度等维度的基因组学特征预测，并列出验证方法与局限性。</p>
+          <p class="mb-8"><strong>组织功能：</strong>作为方法学指南，为研究人员提供测试不同进化衰老理论的具体基因组学分析框架。</p>
+          <p><strong>关联主题：</strong>经典进化衰老理论的基因组学验证</p>
+        
+      </div>
+    </div>
+    
+  </div>
+  
+</div>
+
+<!-- ========== Tab: Methods/Design (type-branched) ========== -->
+<div id="tab-methods" class="tab-panel">
+
+  
+    <!-- Review: methods_landscape -->
+    <div class="section-title">方法族图谱</div>
+    <p class="text-muted mb-16">综述中讨论的主要方法家族及其特点。</p>
+    
+    
+    <div class="card" style="border-left:4px solid var(--teal);">
+      <h3>系统发育比较基因组学（Phylogenetic comparative genomics）</h3>
+      <p class="mb-8"><strong>代表工具：</strong>PGLS (Phylogenetic generalized least squares), Convergent evolution analysis, fast ancestral character estimation</p>
+      <p class="mb-8"><strong>优势：</strong>能够有效控制系统发育惯性（共享祖先效应），识别真正的趋同进化信号和与寿命相关的分子特征。</p>
+      <p class="mb-8"><strong>局限：</strong>高度依赖系统发育树的准确性和物种采样密度；难以处理复杂的基因-环境互作。</p>
+      <p><strong>最适场景：</strong>跨物种寿命变异的分子基础解析、长寿通路的趋同进化检测。</p>
+      <p class="text-muted" style="font-size:.85em;margin-top:4px;">page 7-8 / Figure 3b</p>
+    </div>
+    
+    <div class="card" style="border-left:4px solid var(--teal);">
+      <h3>人类群体遗传学与多基因分析（Human population genetics & Polygenic analysis）</h3>
+      <p class="mb-8"><strong>代表工具：</strong>GWAS, LD score regression, Polygenic scores (PGS), Mendelian randomization, Selection scans (iHS, nSL)</p>
+      <p class="mb-8"><strong>优势：</strong>能够量化复杂性状的遗传相关性，检测自然选择信号，并利用工具变量推断因果关系。</p>
+      <p class="mb-8"><strong>局限：</strong>受限于常见变异偏差（Ascertainment bias）；生存者偏差（Survivorship bias）；环境混杂因素（如社会经济地位）难以完全剥离。</p>
+      <p><strong>最适场景：</strong>验证拮抗多效性（AP）、检测疾病位点的持续选择信号、评估生殖与寿命的遗传权衡。</p>
+      <p class="text-muted" style="font-size:.85em;margin-top:4px;">page 2-4 / Table 1</p>
+    </div>
+    
+    <div class="card" style="border-left:4px solid var(--teal);">
+      <h3>表观遗传时钟与多组学生物标志物（Epigenetic clocks & Multi-omics biomarkers）</h3>
+      <p class="mb-8"><strong>代表工具：</strong>DNA methylation clocks (Pan-mammalian clocks), Single-cell RNA-seq, Proteomics</p>
+      <p class="mb-8"><strong>优势：</strong>提供跨物种、跨组织的统一生物学年龄度量；单细胞技术可解析组织特异性和细胞自主性衰老信号。</p>
+      <p class="mb-8"><strong>局限：</strong>时钟信号可能反映发育程序的延续而非衰老损伤； bulk转录组学可能混淆细胞组成变化与细胞自主表达变化。</p>
+      <p><strong>最适场景：</strong>评估干预措施的抗衰老效果、跨物种衰老速率比较、组织特异性衰老轨迹推断。</p>
+      <p class="text-muted" style="font-size:.85em;margin-top:4px;">page 6-7 / Section: Cross-species biomarkers of ageing</p>
+    </div>
+    
+    
+
+  
+
+  <!-- Tools summary (universal, if present) -->
+  
+</div>
+
+<!-- ========== Tab: Personalized Relevance (type-branched) ========== -->
+<div id="tab-relevance" class="tab-panel">
+  
+  <!-- Pain point matches (universal structure) -->
+  
+  <div class="section-title">痛点匹配</div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-high">high</span>
+      <strong style="margin-left:8px;">evolutionary conservation analysis of regulatory networks</strong>
+    </div>
+    <p>文章详细展示了如何利用序列一致性（Sequence identity）、dN/dS和πN/πS评估衰老标志和长寿基因的进化保守性，并强调了系统发育校正（PGLS）在跨物种网络分析中的必要性。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-high">high</span>
+      <strong style="margin-left:8px;">distinguishing correlation from mechanism in multi-omics studies</strong>
+    </div>
+    <p>文章通过Table 1和正文强调了利用孟德尔随机化（Mendelian randomization）、LD score regression和选择清除扫描（iHS, nSL）来区分多效性相关与因果机制，并提出了构建因果富集时钟的构想。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-medium">medium</span>
+      <strong style="margin-left:8px;">batch effects disguised as biological signals / cross-species integration</strong>
+    </div>
+    <p>文章指出跨物种比较中的“系统发育惯性”本质上类似于批次效应，必须通过PGLS进行校正；同时指出环境因素（如工业化 vs 野生）是巨大的混淆变量，可能导致将环境响应误认为保守的生物学标志（如Inflammageing）。</p>
+  </div>
+  
+  
+
+  <!-- Type-specific relevance sections -->
+  
+    <div class="section-title">推荐阅读</div><div class="card"><div class="list-item">Cagan et al., 2022 (Nature): 跨16种哺乳动物体细胞突变率与寿命关系的里程碑研究，展示了严格的系统发育比较方法。</div><div class="list-item">Timmers et al., 2020 (eLife): 利用UK Biobank数据通过多基因评分验证生殖与寿命拮抗多效性的经典群体遗传学研究。</div><div class="list-item">Lu et al., 2023 (PNAS): 泛哺乳动物表观遗传时钟的构建，展示了跨物种DNA甲基化数据的整合与校准方法。</div><div class="list-item">Kowalczyk et al., 2020 (eLife): 利用趋同进化分析识别长寿哺乳动物中受正选择的基因，提供了比较基因组学的方法学范例。</div></div>
+    <div class="section-title">方法推荐</div><div class="card"><div class="list-item">PGLS (Phylogenetic generalized least squares): 用于跨物种多组学数据（如基因表达、代谢物水平）与寿命的回归分析，控制系统发育树结构。</div><div class="list-item">LD score regression (LDSC): 用于评估人类生殖特征与衰老/疾病表型之间的遗传相关性，量化拮抗多效性。</div><div class="list-item">Mendelian randomization (MR): 结合xQTL数据，推断多组学分子特征（如蛋白质、代谢物）与衰老表型之间的因果方向。</div><div class="list-item">Selection scans (iHS, nSL): 用于在人类群体中检测近期受正选择或平衡选择的衰老/疾病相关位点。</div></div>
+    <div class="card" style="margin-top:16px;"><h3>知识图谱价值</h3><p>该综述为用户提供了从宏观进化理论到微观多组学数据的完整映射。特别是Table 1，直接为用户如何利用群体遗传学和比较基因组学工具验证多效性（Pleiotropy）和进化约束提供了操作指南，极大地拓宽了用户在多组学因果推断和跨物种网络分析中的理论视野。</p></div>
+  
+  
+
+  <!-- Research Recommendations (type-branched) -->
+  
+  <div class="section-title" style="margin-top:24px;">研究建议</div>
+  
+    <div class="rec-card" style="border-left-color:var(--green);"><h4>与用户重合的知识空白</h4><div class="rec-body"><p>综述暴露出当前跨物种多组学整合中缺乏对“发育编程信号”与“衰老损伤信号”的有效计算分离。用户在单细胞/空间多组学和轨迹推断方面的专长，可用于解析成熟后组织中细胞状态转变的进化保守性，填补这一空白。</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--blue);"><h4>入门起点</h4><div class="rec-body"><p>建议从GenAge数据库和Open Genes数据库获取保守衰老基因集，结合用户熟悉的Scanpy/scvi-tools生态，对跨物种单细胞图谱（如Tabula Sapiens/Muris）进行系统发育感知的细胞状态比对。同时，利用UK Biobank的GWAS汇总数据运行LDSC，验证用户感兴趣的多组学QTL靶点是否存在拮抗多效性信号。</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--teal);"><h4>定位建议</h4><div class="rec-body"><p>用户的研究可定位为“多组学层面的进化衰老机制解析”。利用多模态因果推断和xQTL共定位技术，识别那些在进化上受强纯化选择约束、但在人类晚期生命中因环境错配而失调的核心调控节点（如PRC2网络或营养感应通路）。</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--orange);"><h4>综述局限性</h4><div class="rec-body"><p>本文作为叙述性综述，在人类群体遗传学部分主要依赖欧洲血统（UK Biobank）的数据，缺乏跨人群多样性的讨论。此外，对单细胞和空间多组学在衰老进化研究中的最新应用着墨较少，用户需自行补充该领域的最新原始文献。</p></div></div>
+  
+  
+
+  <!-- User profile snapshot -->
+  <div class="section-title" style="margin-top:24px;">用户画像快照</div>
+  <div class="card">
+    <p class="mb-8"><strong>研究领域：</strong>bioinformatics</p>
+    <p class="mb-8"><strong>关注重点：</strong>methods</p>
+    <p><strong>当前痛点：</strong>latent space alignment and cross-modality mapping；batch effect correction across multi-omics protocols；cross-modality integration of spatial and single-cell data；RNA-ATAC peak-gene linking and regulatory association；QTL / colocalization / protein-metabolite linkage；cell type annotation transfer across species and tissues；trajectory inference with lineage information；mediation analysis across molecular layers；causal regulatory inference from multi-omics data；distinguishing correlation from mechanism in multi-omics studies；interpretable deep learning for omics foundation models；evolutionary conservation analysis of regulatory networks；disease-associated cell state identification；multi-scale modeling from molecular to tissue level；immune cell receptor repertoire analysis；spatial domain identification with biological priors；sample size limitations and modality imbalance in multi-omics；batch effects disguised as biological signals；training-validation set independence and label leakage；anchor dependency and over-smoothing in integration models；LD-aware genetic integration: colocalization vs LD artifact；cross-platform / cross-cohort / cross-population reproducibility；missing data and asynchronous sampling across omics layers；measurement scale, dynamic range, and normalization incomparability across proteomics/metabolomics/lipidomics；correlation-only analysis without causal or directional evidence</p>
+  </div>
+</div>
+
+<!-- ========== Tab: Evidence Index (universal) ========== -->
+<div id="tab-evidence" class="tab-panel">
+  <input type="text" class="search-box" id="evidence-search" placeholder="搜索证据..." oninput="filterEvidence()">
+  <table id="evidence-table">
+    <thead><tr><th onclick="sortTable(0)">来源</th><th onclick="sortTable(1)">论断</th><th onclick="sortTable(2)">位置</th><th onclick="sortTable(3)">类型</th></tr></thead>
+    <tbody>
+    
+    <tr><td>主要发现</td><td>衰老的12个标志（hallmarks of ageing）相关基因表现出显著的进化保守性（序列一致性高于背景5-11%），表明衰老并非程序化过程，而是早期生命优化通路在自然选择“阴影（selection shadow）”下的多效性代价。</td><td>page 5 / Figure 2</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>主要发现</td><td>人类基因组学研究证实了拮抗多效性（antagonistic pleiotropy）理论，生殖特征的多基因评分（polygenic scores）与存活至76岁的概率呈显著负相关，且拮抗多效性变异的数量几乎是协同变异的四倍。</td><td>page 2 / Section: Antagonistic pleiotropy</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>主要发现</td><td>跨物种比较基因组学（comparative genomics）显示，体细胞突变率与寿命呈负相关（16种哺乳动物中），且长寿物种在DNA修复、蛋白质稳态和免疫调节等保守通路上表现出更强的纯化选择（purifying selection）或趋同进化（convergent evolution）。</td><td>page 7 / Section: Molecular correlates of lifespan variation</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>主要发现</td><td>炎症衰老（inflammageing）并非普遍的衰老标志，而是高度依赖于工业化环境的兼性反应，野生非人灵长类和部分长寿哺乳动物（如盲鼹鼠）并未表现出该特征。</td><td>page 6 / Section: Cross-species biomarkers of ageing</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>主要发现</td><td>表观遗传时钟（epigenetic clocks）在跨物种间具有高度可转移性，其年龄依赖性的DNA甲基化增益约90%发生在受强纯化选择的Polycomb抑制复合物2（PRC2）调控区域，反映了发育程序在衰老过程中的持续作用。</td><td>page 6 / Section: Cross-species biomarkers of ageing</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    
+    
+    <tr><td>Figure 1</td><td>展示选择阴影（Selection shadow）的概念模型（图1a）以及基于人类人口统计学数据计算的前/后人口转变时期的自然选择强度随年龄下降的曲线（图1b）。</td><td>page 3</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Figure 2</td><td>量化衰老的12个标志相关基因及GenAge长寿基因集的人类-小鼠氨基酸序列一致性，并与背景基因集进行置换检验对比。</td><td>page 5</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Figure 3</td><td>展示脊椎动物最大寿命的系统发育分布（图3a），并对比趋同进化分析与大规模系统发育比较方法（PGLS）的工作流程（图3b）。</td><td>page 8</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Table 1</td><td>系统对比突变积累（MA）与拮抗多效性（AP）在等位基因频率、遗传架构、纯化选择强度等维度的基因组学特征预测，并列出验证方法与局限性。</td><td>page 4</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    </tbody>
+  </table>
+</div>
+
+</div><!-- container -->
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <img id="lightbox-img" src="" alt="Figure">
+</div>
+
+<footer>
+  Generated by Hlokk v2.2.0 (detailed · review) &nbsp;|&nbsp; 20260609_141114 &nbsp;|&nbsp; Paper ID: e512c475beee84d5
+</footer>
+
+<script>
+/* Tab switching */
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+  });
+});
+/* Lightbox */
+function openLightbox(src){const lb=document.getElementById('lightbox');document.getElementById('lightbox-img').src=src;lb.classList.add('show');}
+function closeLightbox(){document.getElementById('lightbox').classList.remove('show');}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLightbox();});
+/* Evidence filter */
+function filterEvidence(){
+  const q=document.getElementById('evidence-search').value.toLowerCase();
+  document.querySelectorAll('#evidence-table tbody tr').forEach(tr=>{
+    tr.style.display=tr.textContent.toLowerCase().includes(q)?'':'none';
+  });
+}
+/* Table sort */
+let sortDir={};
+function sortTable(col){
+  const tb=document.querySelector('#evidence-table tbody');
+  const rows=Array.from(tb.rows);
+  sortDir[col]=!sortDir[col];
+  rows.sort((a,b)=>{
+    const at=a.cells[col].textContent,bt=b.cells[col].textContent;
+    return sortDir[col]?at.localeCompare(bt):bt.localeCompare(at);
+  });
+  rows.forEach(r=>tb.appendChild(r));
+}
+</script>
+</body>
+</html>

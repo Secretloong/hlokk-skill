@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hlokk — Benchmarking single-cell multi-modal data integrations</title>
+<style>
+:root { --bg:#f8f7f4; --card:#fff; --border:#e2dfd9; --accent:#2d5a7b; --accent2:#4a8c6f;
+  --text:#2c2c2c; --muted:#6b6b6b; --tag-bg:#eef2f7; --warn:#c0792a; --danger:#b04040;
+  --blue:#2d5a7b; --teal:#2a7a6a; --green:#4a8c6f; --orange:#c0792a; --purple:#6b5b8a; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:var(--bg); color:var(--text); line-height:1.65; font-size:15px; }
+.container { max-width:1100px; margin:0 auto; padding:16px 20px; }
+
+/* Header */
+header { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; padding:32px 0 24px; }
+header .container { display:flex; flex-direction:column; gap:8px; }
+header h1 { font-size:1.5em; font-weight:600; line-height:1.35; }
+header .meta { opacity:.85; font-size:.9em; }
+header .meta a { color:#cde; }
+header .tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+header .tag { background:rgba(255,255,255,.18); padding:2px 10px; border-radius:12px; font-size:.8em; }
+
+/* Tabs */
+.tab-bar { background:var(--card); border-bottom:2px solid var(--border); position:sticky; top:0; z-index:100; }
+.tab-bar .container { display:flex; gap:0; overflow-x:auto; }
+.tab-btn { padding:12px 18px; cursor:pointer; border:none; background:none; font-size:.9em;
+  color:var(--muted); border-bottom:3px solid transparent; white-space:nowrap; transition:.15s; }
+.tab-btn:hover { color:var(--text); }
+.tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+.tab-panel { display:none; padding:24px 0; }
+.tab-panel.active { display:block; }
+
+/* Cards */
+.card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:20px; margin-bottom:16px; }
+.card h3 { font-size:1.05em; margin-bottom:10px; color:var(--accent); }
+.card-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; }
+
+/* Reading cipher colors */
+.rc-intro { border-left:4px solid var(--blue); }
+.rc-review { border-left:4px solid var(--teal); }
+.rc-result { border-left:4px solid var(--green); }
+.rc-conclusion { border-left:4px solid var(--orange); }
+.rc-label { display:inline-block; font-weight:700; font-size:.8em; padding:2px 8px;
+  border-radius:4px; margin-bottom:6px; color:#fff; }
+.rc-label.intro { background:var(--blue); }
+.rc-label.review { background:var(--teal); }
+.rc-label.result { background:var(--green); }
+.rc-label.conclusion { background:var(--orange); }
+
+/* Tables */
+table { width:100%; border-collapse:collapse; font-size:.9em; }
+th { background:var(--tag-bg); text-align:left; padding:10px 12px; font-weight:600;
+  border-bottom:2px solid var(--border); position:sticky; top:52px; z-index:5; cursor:pointer; }
+th:hover { background:#dde4ed; }
+td { padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+tr:hover td { background:#faf9f6; }
+
+/* Strength badges */
+.badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:.78em; font-weight:600; }
+.badge-strong { background:#d4edda; color:#155724; }
+.badge-moderate { background:#fff3cd; color:#856404; }
+.badge-weak { background:#f8d7da; color:#721c24; }
+.badge-high { background:#d4edda; color:#155724; }
+.badge-medium { background:#fff3cd; color:#856404; }
+.badge-low { background:#f8d7da; color:#721c24; }
+.badge-stated { background:#d4edda; color:#155724; }
+.badge-inferred { background:#e2d6f3; color:#4a2d7a; }
+
+/* Figures */
+.fig-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(480px,1fr)); gap:20px; }
+.fig-card { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:var(--card); }
+.fig-card .fig-img { background:#f0eeeb; text-align:center; cursor:pointer; max-height:400px; overflow:hidden; }
+.fig-card .fig-img img { width:100%; display:block; object-fit:contain; }
+.fig-card .fig-body { padding:16px; }
+.fig-card .fig-id { font-weight:700; color:var(--accent); margin-bottom:6px; }
+
+/* Collapsible */
+.collapsible { cursor:pointer; user-select:none; }
+.collapsible::after { content:" ▼"; font-size:.7em; color:var(--muted); }
+.collapsible.collapsed::after { content:" ▶"; }
+.coll-body { overflow:hidden; transition:max-height .3s ease; }
+.coll-body.collapsed { max-height:0 !important; }
+
+/* Lightbox */
+.lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:1000;
+  align-items:center; justify-content:center; cursor:pointer; }
+.lightbox.show { display:flex; }
+.lightbox img { max-width:95vw; max-height:95vh; border-radius:4px; }
+
+/* Search */
+.search-box { padding:8px 14px; border:1px solid var(--border); border-radius:8px; width:100%;
+  max-width:400px; margin-bottom:16px; font-size:.9em; }
+
+/* Misc */
+.section-title { font-size:1.15em; font-weight:600; margin:0 0 16px 0; color:var(--text); }
+.text-muted { color:var(--muted); }
+.mb-8 { margin-bottom:8px; }
+.mb-16 { margin-bottom:16px; }
+.list-item { padding:8px 0; border-bottom:1px solid var(--border); }
+.list-item:last-child { border-bottom:none; }
+footer { text-align:center; padding:24px; color:var(--muted); font-size:.82em; }
+
+/* Literature Report */
+.report-section { margin-bottom:28px; }
+.report-section h3 { font-size:1.1em; font-weight:600; color:var(--accent); margin-bottom:10px;
+  padding-bottom:6px; border-bottom:2px solid var(--border); }
+.report-section .report-body { font-size:.95em; line-height:1.8; color:var(--text); }
+.report-section .report-body p { margin-bottom:12px; text-indent:2em; }
+.report-label { display:inline-block; font-weight:700; font-size:.75em; padding:2px 10px;
+  border-radius:4px; margin-bottom:8px; color:#fff; letter-spacing:.5px; }
+.report-label.theme { background:var(--blue); }
+.report-label.review { background:var(--teal); }
+.report-label.gap { background:#8b6bb0; }
+.report-label.result { background:var(--green); }
+.report-label.innovation { background:var(--orange); }
+.report-label.method { background:#5a7a8c; }
+.report-label.strategy { background:#8b5a5a; }
+.report-label.recommend { background:#5a6b8c; }
+.report-divider { border:none; border-top:1px dashed var(--border); margin:24px 0; }
+
+/* Research Recommendations & Reading Strategy */
+.rec-card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:20px; margin-bottom:16px; border-left:4px solid var(--accent); }
+.rec-card h4 { font-size:1em; font-weight:600; color:var(--accent); margin-bottom:8px; }
+.rec-card .rec-body { font-size:.95em; line-height:1.8; color:var(--text); }
+.strategy-card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:20px; margin-bottom:16px; }
+.strategy-card .strategy-tag { display:inline-block; font-weight:700; font-size:.8em;
+  padding:3px 10px; border-radius:4px; color:#fff; margin-right:8px; margin-bottom:8px; }
+.strategy-tag.poc { background:#b04040; }
+.strategy-tag.mop { background:#c0792a; }
+.strategy-tag.rpp { background:#6b5b8a; }
+.strategy-tag.wil { background:#2a7a6a; }
+
+/* Research Threads tree */
+.thread-card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:20px; margin-bottom:16px; border-left:4px solid var(--accent); }
+.thread-card h4 { font-size:1.05em; font-weight:600; color:var(--accent); margin-bottom:12px; cursor:pointer; }
+.thread-card h4::after { content:" ▼"; font-size:.65em; color:var(--muted); }
+.sub-q { margin-left:16px; padding:10px 0; border-bottom:1px solid var(--border); }
+.sub-q:last-child { border-bottom:none; }
+.sub-q-title { font-weight:600; font-size:.95em; margin-bottom:6px; cursor:pointer; }
+.sub-q-title::after { content:" ▼"; font-size:.6em; color:var(--muted); }
+.evidence-pt { margin-left:24px; padding:6px 0; font-size:.9em; }
+.evidence-pt .ev-loc { color:var(--muted); font-size:.82em; }
+
+/* Mode badge */
+.mode-badge { display:inline-block; padding:3px 10px; border-radius:12px;
+  font-size:.75em; font-weight:600; color:#fff; margin-left:8px; }
+.mode-badge.overview { background:var(--teal); }
+.mode-badge.detailed { background:var(--purple); }
+
+/* Doc type badge */
+.dtype-badge { display:inline-block; padding:3px 10px; border-radius:12px;
+  font-size:.75em; font-weight:600; color:#fff; margin-left:8px; }
+.dtype-badge.article { background:var(--blue); }
+.dtype-badge.review { background:var(--teal); }
+.dtype-badge.benchmark { background:var(--orange); }
+.dtype-badge.atlas { background:var(--green); }
+.dtype-badge.commentary { background:var(--purple); }
+
+/* Debate cards */
+.debate-card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:16px; margin-bottom:12px; }
+.debate-card .camp { display:inline-block; padding:2px 8px; border-radius:4px; font-size:.82em; font-weight:600; }
+.camp-a { background:#e8f4fd; color:#1a5276; }
+.camp-b { background:#fde8e8; color:#761a1a; }
+
+@media(max-width:640px) { .fig-grid,.card-grid { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+<div class="container">
+  <h1>Benchmarking single-cell multi-modal data integrations
+    <span class="mode-badge detailed">detailed</span>
+    <span class="dtype-badge benchmark">benchmark</span>
+  </h1>
+  <div class="meta">
+    Shaliu Fu et al. &nbsp;|&nbsp; Nature Methods, 2025
+     &nbsp;|&nbsp; <a href="作者开发了用于访问基准测试结果的用户友好平台以及基准测试流程（benchmark pipeline）（具体链接见原文或补充材料）。" target="_blank">代码</a>
+  </div>
+  <div class="tags">
+    <span class="tag">scRNA-seq</span><span class="tag">scATAC-seq</span><span class="tag">CITE-seq</span><span class="tag">spatial multi-omics</span><span class="tag">single-cell multiome</span>
+    <span class="tag">聚焦：methods</span>
+    
+  </div>
+</div>
+</header>
+
+<!-- Tab Bar (type-aware labels) -->
+<div class="tab-bar"><div class="container">
+  <button class="tab-btn active" data-tab="overview">概览</button>
+  <button class="tab-btn" data-tab="report">文献阅读汇报</button>
+  <button class="tab-btn" data-tab="cipher">阅读密码</button>
+  <button class="tab-btn" data-tab="figures">评测图表</button>
+  <button class="tab-btn" data-tab="methods">评测设计</button>
+  <button class="tab-btn" data-tab="relevance">个性化解读</button>
+  <button class="tab-btn" data-tab="evidence">证据索引</button>
+</div></div>
+
+<div class="container">
+
+<!-- ========== Tab 1: Overview ========== -->
+<div id="tab-overview" class="tab-panel active">
+  <div class="card">
+    <h3>评测目标</h3>
+    <p>如何系统、全面地评估现有单细胞多模态整合算法在不同数据类型、模态组合、数据规模和数据质量下的可用性、准确性和鲁棒性？</p>
+  </div>
+  <div class="card-grid">
+    <div class="card">
+      <h3>数据与设计</h3>
+      <p class="mb-8"><strong>数据类型：</strong>scRNA-seq, scATAC-seq, CITE-seq, spatial multi-omics, single-cell multiome</p>
+      <p class="mb-8"><strong>样本信息：</strong>人类和小鼠样本，涵盖免疫（BMMC, PBMC）、肾脏、皮肤、大脑等组织；包含14个公开数据集构建的101个基准数据集，细胞规模从1,000到700,000不等，批次数量从2到143个。</p>
+      <p><strong>评测设计：</strong>系统性基准测试设计。收集40种算法（共65个整合方法），分为配对（paired）、非配对对角线（unpaired diagonal）和非配对马赛克（unpaired mosaic）三大类。从可用性（usability）、准确性（accuracy，包括生物学保守性和批次去除）和鲁棒性（robustness，包括抗稀疏性和多次运行稳定性）三个维度进行统一评估。</p>
+    </div>
+    <div class="card">
+      <h3>数据与代码</h3>
+      <p class="mb-8"><strong>数据可用性：</strong>使用了14个公开的单细胞多组学数据集（具体见原文Supplementary Table 2，如BMMC Multiome, CITE-seq, SHARE-seq等）。</p>
+      <p><strong>代码可用性：</strong>作者开发了用于访问基准测试结果的用户友好平台以及基准测试流程（benchmark pipeline）（具体链接见原文或补充材料）。</p>
+    </div>
+  </div>
+
+  <!-- Key Findings (universal) -->
+  <div class="section-title">主要发现</div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-strong">strong</span>
+      <span class="badge badge-stated">stated</span>
+      <span class="text-muted" style="font-size:.82em;margin-left:8px;">page 2439-2440 / Figure 2</span>
+    </div>
+    <p>在配对scRNA和scATAC整合任务中，Seurat v4 WNN、scMDC和scMVP在准确性上表现最佳，而MultiVI和uniPort在可用性和可扩展性上最优。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-strong">strong</span>
+      <span class="badge badge-stated">stated</span>
+      <span class="text-muted" style="font-size:.82em;margin-left:8px;">page 2441 / Figure 3</span>
+    </div>
+    <p>在配对scRNA和ADT整合任务中，totalVI、Seurat v4 WNN和bindSC综合表现最好；提供批次（batch）信息作为输入能显著提升totalVI和Multigrate的批次校正和生物学保守性指标。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-strong">strong</span>
+      <span class="badge badge-stated">stated</span>
+      <span class="text-muted" style="font-size:.82em;margin-left:8px;">page 2443 / Figure 3g</span>
+    </div>
+    <p>在空间多组学整合中，SpatialGlue在生物学保守性指标上优于Harmony和STAligner等通用批次校正方法，展现了空间多组学专用算法的优势。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-strong">strong</span>
+      <span class="badge badge-stated">stated</span>
+      <span class="text-muted" style="font-size:.82em;margin-left:8px;">page 2443 / Figure 4</span>
+    </div>
+    <p>在非配对对角线整合中，GLUE是唯一能处理500,000细胞规模数据集的算法，且在细胞对齐准确性（cell-alignment accuracy）和鲁棒性上全面领先。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-strong">strong</span>
+      <span class="badge badge-stated">stated</span>
+      <span class="text-muted" style="font-size:.82em;margin-left:8px;">page 2443-2444 / Figure 5</span>
+    </div>
+    <p>在非配对马赛克整合中，MultiVI、Seurat v5 Bridge和StabMap表现最优，且利用配对细胞作为桥梁能显著提升非配对细胞的对齐效果。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-moderate">moderate</span>
+      <span class="badge badge-stated">stated</span>
+      <span class="text-muted" style="font-size:.82em;margin-left:8px;">page 2440-2441 / Figure 2d, 2e</span>
+    </div>
+    <p>部分深度学习模型（如scDEC, scMVP）在多次运行中表现出较高的方差，而设置固定随机种子的模型（如SCALEX, uniPort）及非深度学习方法具有极高的输出稳定性。</p>
+  </div>
+  
+
+  <!-- Type-specific overview sections -->
+  
+    <!-- Evaluation Threads (benchmark) -->
+    
+    <div class="section-title">评测维度分析</div>
+    
+    <div class="thread-card">
+      <h4 onclick="this.parentElement.querySelector('.thread-body').classList.toggle('collapsed')">
+        <span class="badge badge-moderate">#1</span>
+        Usability & Scalability (可用性与可扩展性)
+      </h4>
+      <div class="thread-body">
+        <p class="mb-8"><strong>主要发现：</strong>基因活性矩阵（gene activity matrix, GAM）的计算成为非配对scRNA+scATAC整合的严重计算瓶颈。Signac和Seurat的GAM计算函数在处理500,000细胞时因R语言对象长度限制或内存溢出而崩溃。GLUE因不依赖GAM而成为唯一能处理该规模数据的方法。部分深度学习模型（如MIDAS, scMoMaT）因GPU内存超限被淘汰。</p>
+        <p class="mb-8"><strong>最佳：</strong>GLUE, MultiVI, uniPort, Seurat v5 Bridge</p>
+        <p class="mb-8"><strong>最差：</strong>scAI, DCCA, MIDAS, GCN-SC</p>
+        <p class="mb-8"><strong>意外发现：</strong>非配对整合的瓶颈往往不在于整合算法本身，而在于前置的特征工程（如GAM计算）无法扩展到单细胞图谱级别（atlas-level）的数据规模。</p>
+        <p class="mb-8"><strong>混杂因素：</strong>R语言底层内存管理机制限制了基于R的GAM计算扩展性，这可能使基于Python且不依赖GAM的方法在可用性评分中获得不公平的优势。</p>
+        <p class="text-muted" style="font-size:.85em;">page 2443 / Figure 4a, 4b / Supplementary Table 8</p>
+      </div>
+    </div>
+    
+    <div class="thread-card">
+      <h4 onclick="this.parentElement.querySelector('.thread-body').classList.toggle('collapsed')">
+        <span class="badge badge-moderate">#2</span>
+        Accuracy & Batch Effect Correction (准确性与批次校正)
+      </h4>
+      <div class="thread-body">
+        <p class="mb-8"><strong>主要发现：</strong>没有单一算法在所有数据集上称霸。在配对scRNA+ADT中，提供批次（batch）信息作为协变量对totalVI和Multigrate的性能提升具有决定性作用（如totalVI的graph iLISI从0.1提升至0.4）。图输出方法（如Seurat v4 WNN）在缺乏精细细胞注释的数据集上，其批次去除指标可能因依赖图结构局部逆辛普森指数而失真。</p>
+        <p class="mb-8"><strong>最佳：</strong>Seurat v4 WNN, totalVI (with batch), bindSC, SpatialGlue</p>
+        <p class="mb-8"><strong>最差：</strong>CiteFuse, sciPENN, scMM</p>
+        <p class="mb-8"><strong>意外发现：</strong>SpatialGlue在生物学保守性上优于Harmony和STAligner，但在批次去除上不如STAligner，表明空间先验（spatial priors）可能限制了跨批次的全局混合。</p>
+        <p class="mb-8"><strong>混杂因素：</strong>评估指标（如LISI）对离散细胞类型敏感，但对连续生物学流形（如发育轨迹）的整合质量评估可能存在偏差。</p>
+        <p class="text-muted" style="font-size:.85em;">page 2440-2441 / Figure 2b, 3b, 3c / Extended Data Fig. 4c, 5b</p>
+      </div>
+    </div>
+    
+    <div class="thread-card">
+      <h4 onclick="this.parentElement.querySelector('.thread-body').classList.toggle('collapsed')">
+        <span class="badge badge-moderate">#3</span>
+        Robustness & Stability (鲁棒性与稳定性)
+      </h4>
+      <div class="thread-body">
+        <p class="mb-8"><strong>主要发现：</strong>降采样（downsampling）对生物学保守指标的影响大于对批次去除指标的影响。在稳定性方面，部分非深度学习方法（如SIMBA, MaxFuse）在多次运行中表现出指标波动；而固定了随机种子的深度学习模型（如SCALEX, uniPort, Multigrate）输出完全确定。scDEC和scMVP在未固定种子时方差最大。</p>
+        <p class="mb-8"><strong>最佳：</strong>GLUE, Seurat v4 WNN, SCALEX, uniPort</p>
+        <p class="mb-8"><strong>最差：</strong>scDEC, scMVP (unseeded), SIMBA</p>
+        <p class="mb-8"><strong>意外发现：</strong>通常认为非深度学习确定性算法更稳定，但评测发现部分基于图或最优传输的非DL方法因内部启发式步骤或并行计算顺序导致多次运行结果波动。</p>
+        <p class="mb-8"><strong>混杂因素：</strong>深度学习框架（如PyTorch）的GPU并行计算非确定性可能导致未固定种子时的方差，这属于工程实现问题而非算法理论缺陷。</p>
+        <p class="text-muted" style="font-size:.85em;">page 2440-2443 / Figure 2d, 2e, 3e, 3f, 4g, 4h / Supplementary Fig. 6, 7</p>
+      </div>
+    </div>
+    
+    
+
+    <!-- Rankings (benchmark) -->
+    
+    <div class="section-title">排名与推荐</div>
+    
+    <table>
+      <thead><tr><th>排名</th><th>方法</th><th>优势</th><th>劣势</th><th>最佳场景</th></tr></thead>
+      <tbody>
+      
+      <tr><td><strong>#1</strong></td><td>GLUE</td><td>唯一能扩展至500,000细胞的非配对对角线整合方法；不依赖GAM计算；细胞对齐准确性和鲁棒性极高。</td><td>需要构建先验调控网络（如基于 motif 或共表达），对先验知识质量有一定依赖。</td><td>超大规模非配对 scRNA-seq 与 scATAC-seq 数据集的对角线整合及调控关联分析。</td></tr>
+      
+      <tr><td><strong>#2</strong></td><td>MultiVI / totalVI (scvi-tools)</td><td>基于深度生成模型，可用性极佳，支持GPU加速和超大尺度数据；totalVI在提供batch info时批次校正能力顶尖；支持模态插补。</td><td>未提供batch info时，生物学保守性受批次效应影响较大；训练时间较长。</td><td>配对 Multiome (MultiVI) 或 CITE-seq (totalVI) 数据，尤其是存在复杂批次效应且需要插补缺失模态的场景。</td></tr>
+      
+      <tr><td><strong>#3</strong></td><td>Seurat v4 WNN / v5 Bridge</td><td>生态完善，准确性高（尤其是WNN在配对数据，Bridge在马赛克数据）；生物学解释性强。</td><td>内存消耗大（WNN在500k细胞时超限）；图输出方法在特定批次评估指标下可能失真。</td><td>中小规模（<100k细胞）配对数据的高精度整合，或基于参考图谱的马赛克映射。</td></tr>
+      
+      <tr><td><strong>#4</strong></td><td>SpatialGlue</td><td>专为空间多组学设计，利用空间图结构，生物学保守性优于通用方法。</td><td>批次去除能力略逊于纯批次校正工具；依赖高质量的空间邻接图构建。</td><td>空间转录组与空间蛋白质组（或单细胞参考）的跨模态整合与空间域识别。</td></tr>
+      
+      </tbody>
+    </table>
+    
+    
+    <div class="card" style="margin-top:16px;">
+      <h3>实践指南</h3>
+      <p>1. 始终检查算法是否支持并正确配置了批次（batch）协变量输入，这对深度学习生成模型（如totalVI, Multigrate）的性能至关重要。2. 对于非配对RNA-ATAC整合，若数据规模超过10万细胞，应放弃依赖传统GAM计算的方法，转向基于图神经网络或直接特征映射的方法（如GLUE）。3. 在评估整合质量时，不应仅依赖单一指标（如LISI），需结合生物学保守性和下游任务（如差异表达、轨迹推断）综合判断。</p>
+    </div>
+    
+    
+
+  
+
+  <!-- Limitations (universal) -->
+  
+  
+  <div class="section-title">评测局限性</div>
+  
+  <div class="list-item"><span class="badge badge-inferred">inferred</span> 伪非配对数据（pseudo-unpaired datasets）的构建方式是通过人为掩盖配对数据的细胞匹配信息，这无法完全模拟真实独立实验中由于供体差异、测序平台差异带来的系统性生物学偏移和技术噪声。 — <span class="text-muted">影响: 可能导致对非配对整合算法（尤其是对角线和马赛克方法）在真实世界复杂场景下泛化能力的过高估计。</span></div>
+  
+  <div class="list-item"><span class="badge badge-inferred">inferred</span> 评估指标（如 LISI, ARI）主要针对离散的细胞类型聚类设计，对连续生物学过程（如发育轨迹、细胞状态渐变、RNA velocity）的跨模态对齐质量缺乏有效的量化手段。 — <span class="text-muted">影响: 可能使倾向于过度聚类或破坏连续流形结构的算法在评分中获利，而保留轨迹结构的算法被低估。</span></div>
+  
+  <div class="list-item"><span class="badge badge-stated">stated</span> 空间多组学（spatial multi-omics）部分的评估仅包含3个专用工具和有限的公开数据集，且未深入评估空间分辨率下的亚细胞或配体-受体相互作用推断。 — <span class="text-muted">影响: 空间整合部分的结论代表性受限，无法全面指导复杂空间微环境下的多模态分析。</span></div>
+  
+  
+  
+</div>
+
+<!-- ========== Tab: Literature Reading Report ========== -->
+<div id="tab-report" class="tab-panel">
+  
+
+  
+  <p class="text-muted mb-16">评测论文阅读汇报：问题背景、方法概览、评测结果、对比讨论与实践启示。</p>
+  <div class="report-section"><span class="report-label theme">评测背景</span><h3>评测问题背景和动机</h3><div class="report-body"><p>单细胞多模态测序技术（single-cell multi-modal sequencing）的爆发使得在单细胞分辨率下同时测量DNA可及性、RNA表达和蛋白质丰度成为可能。然而，不同模态在维度、稀疏性和数据分布上存在巨大异质性（如scATAC-seq的极度稀疏与二值化）。为应对这一挑战，生物信息学界开发了超过40种整合算法。然而， prior studies 仅覆盖了少量工具和特定场景，缺乏一个在统一硬件限制、多模态组合和数据规模下全面评估算法可用性、准确性和鲁棒性的系统性基准（benchmark）。</p></div></div>
+  <div class="report-section"><span class="report-label method">方法概览</span><h3>被评测方法的技术原理</h3><div class="report-body"><p>被评测的方法主要分为几大类：基于图/锚点的方法（如 Seurat v4 WNN, bindSC），通过寻找跨模态互近邻构建联合图；深度生成模型（如 MultiVI, totalVI, scMVP），利用变分自编码器（VAE）将多模态数据映射到共享潜在空间（latent space）；基于矩阵分解的方法（如 MOFA+, Liger）；以及基于图神经网络的方法（如 GLUE, SpatialGlue），利用先验网络或空间邻接图引导跨模态对齐。此外，针对非配对数据，许多方法依赖基因活性矩阵（gene activity matrix, GAM）作为桥梁。</p></div></div>
+  <hr class="report-divider">
+  <div class="report-section"><span class="report-label result">评测结果</span><h3>按维度叙述评测结果</h3><div class="report-body"><p>在可用性方面，评测揭示了GAM计算是超大规模非配对整合的致命瓶颈，GLUE因绕过此步骤成为唯一支持50万细胞的方法。在准确性方面，配对scRNA+scATAC任务中Seurat v4 WNN和scMDC领先，而配对scRNA+ADT任务中totalVI和bindSC表现最佳；值得注意的是，提供批次协变量使totalVI的批次去除指标提升了数倍。在非配对对角线和马赛克任务中，GLUE和MultiVI/Seurat v5 Bridge分别凭借其架构优势和对配对桥梁的利用占据主导。在空间多组学中，SpatialGlue证明了引入空间先验对保留生物学结构的必要性。在鲁棒性方面，降采样实验表明生物学保守指标对稀疏性更敏感，且固定随机种子的深度学习模型展现出比部分非DL方法更高的运行间稳定性。</p></div></div>
+  <div class="report-section"><span class="report-label result">差异分析</span><h3>方法间差异的原因分析</h3><div class="report-body"><p>方法间的性能差异主要源于其对模态异质性和批次效应的处理机制。基于图的方法（如Seurat）在离散细胞类型分明时表现优异，但在连续流形或批次效应极强时可能受限于局部锚点的质量。深度生成模型（如scvi-tools系列）通过概率建模和显式协变量输入，在处理复杂批次效应和模态插补时更具优势，但需要足够的计算资源和合理的参数调优。不依赖中间特征（如GAM）的端到端深度学习架构（如GLUE）在可扩展性上展现出压倒性优势。</p></div></div>
+  <hr class="report-divider">
+  <div class="report-section"><span class="report-label innovation">实践启示</span><h3>对实际使用者的指导意义</h3><div class="report-body"><p>本研究为研究人员提供了清晰的算法选择决策树：超大规模非配对RNA-ATAC首选GLUE；配对CITE-seq且需批次校正首选totalVI（务必输入batch参数）；空间多组学首选SpatialGlue。同时，评测强调了在基准测试中区分“算法理论能力”与“工程实现瓶颈”（如R语言内存限制）的重要性。</p></div></div>
+  <div class="report-section"><span class="report-label gap">评测局限</span><h3>评测设计的局限性</h3><div class="report-body"><p>该基准测试的局限在于其金标准高度依赖人工注释和伪降级数据，可能无法完全反映真实独立队列中的系统性生物学偏移。此外，现有指标对连续发育轨迹的跨模态对齐评估能力不足，且空间多组学部分的工具和数据集覆盖度受限于该领域的发展阶段，结论的泛化性需在未来持续更新。</p></div></div>
+
+  
+
+  
+
+  <!-- Reading Strategy (universal, QoderWork-generated) -->
+  
+</div>
+
+<!-- ========== Tab: Reading Cipher (universal) ========== -->
+<div id="tab-cipher" class="tab-panel">
+  <p class="text-muted mb-16">学术论文叙事结构解码：从前言到结论的完整论证链路。</p>
+  <div class="card rc-intro"><span class="rc-label intro">前言 · WTD</span><h3>他们要做什么</h3><p>本文旨在系统评估40种单细胞多模态整合算法（涵盖DNA、RNA、蛋白质和空间组学）在配对（paired）、非配对对角线（unpaired diagonal）和非配对马赛克（unpaired mosaic）数据集上的可用性、准确性和鲁棒性（Page 2437）。评估目标是为研究人员提供针对不同数据规模、模态组合和数据质量的算法选择指南（Page 2438）。</p></div>
+  <div class="card rc-review"><span class="rc-label review">综述 · SPL</span><h3>现有文献综述</h3><p>单细胞多模态测序技术快速发展，产生了配对和非配对数据，推动了40多种整合工具的开发（Page 2437）。先前的研究仅对少量工具进行了初步分析，例如评估了5种scRNA和scATAC整合工具以及4种Multiome引导的马赛克整合工具（Page 2438）。</p></div>
+  <div class="card rc-review"><span class="rc-label review">综述 · CPL</span><h3>现有文献批评</h3><p>不同模态在维度和数据特征上存在巨大差异，例如scATAC-seq数据具有极高的稀疏性和二值化特征，现有工具在有效利用这些异质性时面临挑战（Page 2437）。此外，先前的基准测试覆盖范围有限，未能全面评估算法在不同数据集类型、模态、规模和质量下的综合表现（Page 2438）。</p></div>
+  <div class="card rc-review"><span class="rc-label review">综述 · GAP</span><h3>研究空白</h3><p>领域内缺乏一个全面、系统的基准测试框架，无法在统一的硬件限制和评估指标下，横向比较现有大量单细胞多模态整合算法在配对、非配对及马赛克场景下的性能（Page 2437-2438）。</p></div>
+  <div class="card rc-review"><span class="rc-label review">综述 · RAT</span><h3>理论依据</h3><p>随着多组学数据集规模和复杂度的增加，研究人员迫切需要客观的评估结果来针对特定数据集选择最优算法（Page 2438）。同时，新算法的开发和迭代也需要标准化的测试基准来验证其实际效用（Page 2438）。</p></div>
+  <div class="card rc-result"><span class="rc-label result">结果 · ROF</span><h3>研究结果</h3><div class="list-item">在配对scRNA和scATAC整合中，Seurat v4 WNN、scMDC和scMVP在准确性上表现最佳，而MultiVI和uniPort在可用性和可扩展性上最优（Page 2439-2440 / Figure 2）。</div><div class="list-item">在配对scRNA和ADT整合中，totalVI、Seurat v4 WNN和bindSC综合表现最好，且提供批次信息能显著提升totalVI和Multigrate的性能（Page 2441 / Figure 3）。</div><div class="list-item">在空间多组学整合中，SpatialGlue在生物学保守性指标上优于Harmony和STAligner等通用批次校正方法（Page 2443 / Figure 3g）。</div><div class="list-item">在非配对对角线整合中，GLUE是唯一能处理500,000细胞规模数据集的算法，且在细胞对齐准确性和鲁棒性上全面领先（Page 2443 / Figure 4）。</div><div class="list-item">在非配对马赛克整合中，MultiVI、Seurat v5 Bridge和StabMap表现最优，且利用配对细胞作为桥梁能显著提升非配对细胞的对齐效果（Page 2443-2444 / Figure 5）。</div></div>
+  <div class="card rc-result"><span class="rc-label result">结果 · RCL</span><h3>与现有文献一致</h3><div class="list-item">与先前认知一致，提供批次（batch）信息作为输入参数能显著提升MultiVI、Multigrate和totalVI等算法的批次校正和生物学保守性指标（Page 2440, 2441 / Extended Data Fig. 4c, Fig. 3c）。</div><div class="list-item">k-NN平滑处理能有效缓解单细胞数据（尤其是scATAC-seq）在细胞水平的稀疏性问题，这与先前处理稀疏数据的策略一致（Page 2440 / Extended Data Fig. 4e）。</div></div>
+  <div class="card rc-result"><span class="rc-label result">结果 · RTC</span><h3>与现有文献相反</h3><div class="list-item">没有一种算法在所有数据集上均表现完美，例如Seurat v4 WNN在BMMC p10等混合批次数据集上表现优异，但在10X PBMC数据集上表现不佳，表明算法性能高度依赖于数据集的具体特征（Page 2440）。</div><div class="list-item">部分非深度学习方法（如SIMBA, MaxFuse）在多次重复运行中表现出指标波动，这与通常认为非深度学习确定性算法更稳定的直觉相反，而部分深度学习模型因固定随机种子反而更稳定（Page 2443 / Figure 4g, 4h）。</div></div>
+  <div class="card rc-conclusion"><span class="rc-label conclusion">结论 · WTDD</span><h3>他们做了什么</h3><p>作者收集了40种算法（65个方法）和14个公开数据集（101个基准数据集），建立了包含可用性、准确性和鲁棒性的统一评估工作流（Page 2438 / Figure 1）。此外，作者开发了用于访问基准测试结果的在线交互平台以及自动化基准测试流程（benchmark pipeline）（Page 2438）。</p></div>
+  <div class="card rc-conclusion"><span class="rc-label conclusion">结论 · RFW</span><h3>未来建议</h3><div class="list-item">随着空间多组学和更复杂模态的出现，未来的基准测试需要持续纳入新兴算法和模态组合（Page 2443）。</div><div class="list-item">需要进一步优化算法在超大规模数据集（如百万级细胞）和极度稀疏数据下的计算效率和内存占用，例如改进基因活性矩阵（GAM）的计算方法（Page 2443）。</div><div class="list-item">建议开发者在发布新算法时提供标准化的接口和固定随机种子的选项，以提高结果的可重复性和跨平台兼容性（Page 2440-2443）。</div></div>
+</div>
+
+<!-- ========== Tab: Figure Arguments (type-branched) ========== -->
+<div id="tab-figures" class="tab-panel">
+  
+  <div class="fig-grid">
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Figure 1 — page 2439
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Figure 1 <span class="badge badge-moderate">method_overview</span></div>
+        
+          <p class="mb-8"><strong>对比方法：</strong>All 40 algorithms (65 methods)</p>
+          <p class="mb-8"><strong>评测维度：</strong>Overall Benchmark Design</p>
+          <p class="mb-8"><strong>核心结论：</strong>展示了配对、非配对对角线、非配对马赛克三种整合任务的定义，以及可用性、准确性、鲁棒性三维评估框架。</p>
+          <p><strong>获胜条件：</strong>N/A</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Figure 2 — page 2440
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Figure 2 <span class="badge badge-moderate">performance_comparison</span></div>
+        
+          <p class="mb-8"><strong>对比方法：</strong>Paired scRNA+scATAC methods (e.g., Seurat v4 WNN, MultiVI, scMDC, scMVP)</p>
+          <p class="mb-8"><strong>评测维度：</strong>Accuracy & Robustness</p>
+          <p class="mb-8"><strong>核心结论：</strong>Seurat v4 WNN, scMDC, scMVP准确性最高；MultiVI, uniPort可用性最好；DCCA和scMVP在插补（imputation）任务中表现优异。</p>
+          <p><strong>获胜条件：</strong>Seurat v4 WNN在混合批次且细胞注释良好的数据集上准确性获胜；MultiVI在超大规模数据扩展性上获胜。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Figure 3 — page 2442
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Figure 3 <span class="badge badge-moderate">performance_comparison</span></div>
+        
+          <p class="mb-8"><strong>对比方法：</strong>Paired scRNA+ADT methods & Spatial multi-omics methods</p>
+          <p class="mb-8"><strong>评测维度：</strong>Accuracy & Batch Parameter Sensitivity</p>
+          <p class="mb-8"><strong>核心结论：</strong>totalVI和bindSC在scRNA+ADT中领先，且batch参数对totalVI至关重要。SpatialGlue在空间多组学生物学保守性上优于通用批次校正工具。</p>
+          <p><strong>获胜条件：</strong>totalVI在提供batch info时批次去除和生物学保守性均大幅提升；SpatialGlue在保留空间域结构时获胜。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Figure 4 — page 2443
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Figure 4 <span class="badge badge-moderate">scalability_analysis</span></div>
+        
+          <p class="mb-8"><strong>对比方法：</strong>Unpaired diagonal scRNA+scATAC methods (e.g., GLUE, MaxFuse, Seurat v3 CCA)</p>
+          <p class="mb-8"><strong>评测维度：</strong>Scalability & Alignment Accuracy</p>
+          <p class="mb-8"><strong>核心结论：</strong>GAM计算瓶颈导致大多数方法无法处理500k细胞，GLUE是唯一胜出者，且在细胞对齐准确性（FOSCTTM）上全面领先。</p>
+          <p><strong>获胜条件：</strong>GLUE在超大尺度（500k）和跨模态对齐精度上双重获胜。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Figure 5 — page 2443-2444
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Figure 5 <span class="badge badge-moderate">performance_comparison</span></div>
+        
+          <p class="mb-8"><strong>对比方法：</strong>Unpaired mosaic methods (e.g., MultiVI, Seurat v5 Bridge, StabMap, MIDAS)</p>
+          <p class="mb-8"><strong>评测维度：</strong>Mosaic Integration Accuracy</p>
+          <p class="mb-8"><strong>核心结论：</strong>利用配对细胞作为桥梁的马赛克整合方法（MultiVI, Seurat v5 Bridge）在对齐未配对细胞时，显著优于纯对角线整合方法（如GLUE）。</p>
+          <p><strong>获胜条件：</strong>MultiVI和Seurat v5 Bridge在同时包含配对和非配对数据的马赛克场景下获胜。</p>
+        
+      </div>
+    </div>
+    
+  </div>
+  
+</div>
+
+<!-- ========== Tab: Methods/Design (type-branched) ========== -->
+<div id="tab-methods" class="tab-panel">
+
+  
+    <!-- Benchmark: benchmark_design -->
+    <div class="section-title">评测设计</div>
+    
+    <div class="card"><h3>问题定义</h3><p>单细胞多模态数据整合（single-cell multi-modal data integration）算法在配对（paired）、非配对对角线（unpaired diagonal）和非配对马赛克（unpaired mosaic）场景下的系统性基准测试，涵盖DNA（scATAC-seq）、RNA（scRNA-seq）、蛋白质（ADT）和空间组学（spatial omics）模态。</p></div>
+    
+    <div class="section-title">被评测方法</div>
+    <table>
+      <thead><tr><th>方法</th><th>版本</th><th>类别</th><th>关键参数</th></tr></thead>
+      <tbody>
+      
+      <tr><td><strong>Seurat v4 WNN / v3 CCA / v4 RPCA / v5 Bridge</strong></td><td>v3/v4/v5</td><td>Graph-based / CCA / Anchor-based</td><td>默认参数，部分测试评估了是否输入批次（batch）信息</td></tr>
+      
+      <tr><td><strong>MultiVI</strong></td><td>scvi-tools</td><td>Deep Generative Model (VAE)</td><td>支持GPU加速，测试了可选批次（batch）协变量输入</td></tr>
+      
+      <tr><td><strong>totalVI</strong></td><td>scvi-tools</td><td>Deep Generative Model (VAE)</td><td>支持GPU加速，测试了可选批次（batch）协变量输入</td></tr>
+      
+      <tr><td><strong>GLUE</strong></td><td>PyTorch</td><td>Graph Neural Network / Variational Autoencoder</td><td>不依赖基因活性矩阵（GAM），直接处理峰（peak）和基因（gene）特征</td></tr>
+      
+      <tr><td><strong>SpatialGlue</strong></td><td>PyTorch</td><td>Spatial Graph Neural Network</td><td>利用空间位置信息和跨模态图结构进行整合</td></tr>
+      
+      <tr><td><strong>scMDC / scMVP / scDEC</strong></td><td>PyTorch</td><td>Deep Clustering / Multi-view VAE</td><td>深度学习聚类或生成模型，评估了随机种子对稳定性的影响</td></tr>
+      
+      <tr><td><strong>bindSC / MaxFuse</strong></td><td>R / Python</td><td>Optimal Transport / Fusion</td><td>基于最优传输或典型相关分析进行跨模态细胞对齐</td></tr>
+      
+      <tr><td><strong>MOFA+ / Multigrate</strong></td><td>R / Python</td><td>Matrix Factorization / Multi-view Generative</td><td>MOFA+使用因子权重解释，Multigrate测试了批次参数</td></tr>
+      
+      </tbody>
+    </table>
+    
+    
+    <div class="section-title" style="margin-top:20px;">评测数据集</div>
+    <table>
+      <thead><tr><th>名称</th><th>来源</th><th>特征</th><th>选用理由</th></tr></thead>
+      <tbody>
+      
+      <tr><td><strong>BMMC Multiome & CITE-seq</strong></td><td>10x Genomics / 公开数据库</td><td>包含配对scRNA+scATAC及scRNA+ADT数据，规模从1,000到500,000细胞（模拟），具有精细的层级细胞注释（level 1 & level 2）。</td><td>作为金标准构建伪非配对（pseudo-unpaired）和马赛克（mosaic）数据集，评估细胞对齐准确性。</td></tr>
+      
+      <tr><td><strong>SHARE-seq (skin)</strong></td><td>公开文献</td><td>配对scRNA+scATAC数据，包含复杂的组织异质性。</td><td>评估非配对对角线整合方法在真实生物学组织中的嵌入和对齐能力。</td></tr>
+      
+      <tr><td><strong>10X PBMC & 10X mouse brain</strong></td><td>10x Genomics</td><td>包含混合批次（mixed batches）和单批次数据集，用于测试批次去除能力。</td><td>评估算法在不同批次效应强度下的生物学保守性和批次去除指标。</td></tr>
+      
+      <tr><td><strong>Spatial CITE-seq (Lymph node, Spleen, Thymus)</strong></td><td>公开文献</td><td>包含空间位置、转录组和蛋白质表达的多模态数据。</td><td>专门用于评估空间多组学整合工具（如SpatialGlue）与通用批次校正工具的差异。</td></tr>
+      
+      </tbody>
+    </table>
+    
+    
+    <div class="section-title" style="margin-top:20px;">评价指标</div>
+    <table>
+      <thead><tr><th>指标</th><th>定义</th><th>衡量什么</th></tr></thead>
+      <tbody>
+      
+      <tr><td><strong>Biological-conservation metrics</strong></td><td>包括 ARI, NMI, ASW (Average Silhouette Width), isolated labels F1 等。</td><td>整合后潜在空间（latent space）保留真实生物学细胞类型结构的能力。</td></tr>
+      
+      <tr><td><strong>Batch-removal metrics</strong></td><td>包括 Graph iLISI, Batch ASW, Graph connectivity 等。</td><td>消除技术批次效应、促进不同批次细胞在潜在空间中混合的能力。</td></tr>
+      
+      <tr><td><strong>Cell-alignment accuracy</strong></td><td>FOSCTTM (Fraction of Samples Closer Than the True Match), 细胞/细胞类型水平的真假匹配比例。</td><td>非配对整合中，跨模态相似细胞在潜在空间中的对齐精度。</td></tr>
+      
+      <tr><td><strong>Downsample-AUC</strong></td><td>在不同降采样深度（如10%, 25%, 50%）下准确性指标曲线下面积。</td><td>算法对数据稀疏性（data sparsity）和dropout的鲁棒性。</td></tr>
+      
+      <tr><td><strong>Stability (Absolute CV & S.d.)</strong></td><td>5次独立运行结果的变异系数（CV）和标准差（S.d.）。</td><td>算法输出的确定性和可重复性。</td></tr>
+      
+      </tbody>
+    </table>
+    
+    <div class="card" style="margin-top:16px;"><h3>评测协议</h3><p>建立统一基准工作流。所有方法在相同硬件限制（500GB内存，24小时运行时间，GPU加速）下评估。对于支持随机种子的深度学习方法，在稳定性测试中评估固定种子与不固定种子的差异。对于非配对评估，使用配对数据集隐藏匹配信息构建伪非配对数据。未向默认不支持或不要求批次信息的方法提供batch参数，以保证基础比较的公平性，但单独设计了批次参数消融实验。</p></div>
+    <div class="card"><h3>Ground Truth</h3><p>配对数据集的已知细胞匹配信息（cell-match information）作为非配对/马赛克整合的金标准；人工精细注释的细胞类型（curated cell annotations）作为生物学保守性的金标准。</p></div>
+    
+    
+    <div class="section-title" style="margin-top:24px;">方法学洞察</div>
+    <div class="card-grid">
+      <div class="card"><h3>关键因素</h3><p>1. 数据规模与内存墙（GAM计算瓶颈直接决定了非配对方法的可用性）。2. 批次协变量的显式输入（对VAE类模型性能影响巨大）。3. 模态异质性处理（如scATAC的二值化和高稀疏性需要特定的平滑或插补策略，如k-NN smoothing）。</p></div>
+      <div class="card"><h3>非关键因素</h3><p>算法是否基于“深度学习”并不直接决定其输出的稳定性。未固定种子的DL模型方差大，但固定种子后完全确定；而部分基于图或最优传输的非DL方法反而因启发式步骤存在运行间波动。</p></div>
+      <div class="card"><h3>参数敏感性</h3><p>Batch parameter（批次参数）对 totalVI 和 Multigrate 具有极高的敏感性。例如 totalVI 的 graph iLISI 从 0.1 跃升至 0.4，ARI 从 0.37 跃升至 0.62（Page 2441 / Figure 3c）。</p></div>
+      <div class="card"><h3>计算考量</h3><p>设定了 500GB 内存和 24h 运行的硬性阈值。scAI（时间超限）、DCCA/scMVAE（GPU内存超限）、MIDAS（时间与内存双超限）在此阈值下被淘汰。基于Python和PyTorch/scvi-tools的方法在GPU利用率和大规模矩阵运算上普遍优于基于R的方法。</p></div>
+    </div>
+    
+
+  
+
+  <!-- Tools summary (universal, if present) -->
+  
+</div>
+
+<!-- ========== Tab: Personalized Relevance (type-branched) ========== -->
+<div id="tab-relevance" class="tab-panel">
+  
+  <!-- Pain point matches (universal structure) -->
+  
+  <div class="section-title">痛点匹配</div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-high">high</span>
+      <strong style="margin-left:8px;">latent space alignment and cross-modality mapping / RNA-ATAC peak-gene linking</strong>
+    </div>
+    <p>评测证实GLUE在非配对scRNA+scATAC对齐（FOSCTTM）和可扩展性上最优，且其架构天然支持peak-gene调控关联推断，直接回应跨模态映射痛点。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-high">high</span>
+      <strong style="margin-left:8px;">batch effect correction across multi-omics protocols</strong>
+    </div>
+    <p>明确指出totalVI和Multigrate必须显式输入batch参数才能有效去除批次效应，提供了具体的参数配置避坑指南。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-high">high</span>
+      <strong style="margin-left:8px;">cross-modality integration of spatial and single-cell data</strong>
+    </div>
+    <p>评估了SpatialGlue，证明其利用空间图结构在保留生物学保守性上优于Harmony等通用方法。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-medium">medium</span>
+      <strong style="margin-left:8px;">training-validation set independence and label leakage / anchor dependency</strong>
+    </div>
+    <p>评测揭示了基于锚点（anchor）的方法在缺乏精细注释时的指标失真问题，以及图输出方法在批次评估中的局限性。</p>
+  </div>
+  
+  
+
+  <!-- Type-specific relevance sections -->
+  
+    <div class="section-title">可直接采用的方法</div><div class="card"><div class="list-item">GLUE (PyTorch/Scanpy compatible)</div><div class="list-item">MultiVI (scvi-tools)</div><div class="list-item">totalVI (scvi-tools)</div><div class="list-item">SpatialGlue (PyTorch/Squidpy compatible)</div><div class="list-item">Seurat v4 WNN / v5 Bridge (R/Seurat)</div></div>
+    <div class="section-title">可复用数据集</div><div class="card"><div class="list-item">BMMC Multiome (用于测试RNA-ATAC linking和伪非配对对齐)</div><div class="list-item">Spatial CITE-seq (Lymph node, Spleen, Thymus) (用于测试空间多模态整合)</div><div class="list-item">SHARE-seq skin (用于测试复杂组织异质性下的整合)</div></div>
+    <div class="card" style="margin-top:16px;"><h3>参数建议</h3><p>1. 使用 totalVI/Multigrate 时，必须在模型初始化或训练参数中传入 `batch_key`。2. 使用 GLUE 处理 >100k 细胞数据时，避免使用 Signac 计算 GAM，直接输入 peak 和 gene 计数矩阵。3. 运行 scMVP/scDEC 等模型时，务必在代码中设置全局随机种子（如 `torch.manual_seed`）以保证结果可重复性。</p></div>
+  
+  
+
+  <!-- Research Recommendations (type-branched) -->
+  
+  <div class="section-title" style="margin-top:24px;">研究建议</div>
+  
+    <div class="rec-card" style="border-left-color:var(--green);"><h4>方法选型建议</h4><div class="rec-body"><p>针对您的多组学因果推断和RNA-ATAC调控关联研究，强烈推荐使用 GLUE 进行非配对数据的对角线整合，其图神经网络架构能直接输出peak-gene调控权重；针对空间转录组与单细胞参考的映射，推荐使用 SpatialGlue 结合 Squidpy 进行空间域识别；针对配对CITE-seq/Multiome数据的预处理和批次校正，使用 scvi-tools 生态的 totalVI/MultiVI，并严格配置批次协变量。</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--blue);"><h4>管线集成</h4><div class="rec-body"><p>GLUE 和 SpatialGlue 均基于 PyTorch，可无缝集成到您的 Python/Scanpy/AnnData 工作流中。totalVI/MultiVI 原生支持 MuData 和 AnnData 格式，可直接作为 scvi-tools 管道的一部分。建议构建基于 MuData 的统一数据容器，利用 scvi-tools 进行降维和批次校正，随后将潜在空间（latent representation）输入 GLUE 进行跨模态调控网络推断。</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--orange);"><h4>遗漏评测维度</h4><div class="rec-body"><p>评测未覆盖跨模态因果推断（如从ATAC到RNA的定向调控推断）的准确性评估，也未评估整合后对下游xQTL/colocalization分析的增益。此外，对连续轨迹（trajectory）和RNA velocity的跨模态一致性缺乏量化指标。</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--purple);"><h4>复现路径</h4><div class="rec-body"><p>作者提供了公开的基准测试管道（benchmark pipeline）和交互式平台（见论文Page 2438提及的链接）。复现需准备 500GB+ 内存的服务器和 NVIDIA GPU（推荐 A100/V100 以复现大规模深度学习模型的训练）。环境配置需包含 R (>=4.1) 及 Seurat/Signac，Python (>=3.8) 及 scvi-tools/PyTorch/Scanpy。注意复现非配对任务时需使用作者提供的脚本生成伪非配对（pseudo-unpaired）数据掩码。</p></div></div>
+  
+  
+
+  <!-- User profile snapshot -->
+  <div class="section-title" style="margin-top:24px;">用户画像快照</div>
+  <div class="card">
+    <p class="mb-8"><strong>研究领域：</strong>bioinformatics</p>
+    <p class="mb-8"><strong>关注重点：</strong>methods</p>
+    <p><strong>当前痛点：</strong>latent space alignment and cross-modality mapping；batch effect correction across multi-omics protocols；cross-modality integration of spatial and single-cell data；RNA-ATAC peak-gene linking and regulatory association；QTL / colocalization / protein-metabolite linkage；cell type annotation transfer across species and tissues；trajectory inference with lineage information；mediation analysis across molecular layers；causal regulatory inference from multi-omics data；distinguishing correlation from mechanism in multi-omics studies；interpretable deep learning for omics foundation models；evolutionary conservation analysis of regulatory networks；disease-associated cell state identification；multi-scale modeling from molecular to tissue level；immune cell receptor repertoire analysis；spatial domain identification with biological priors；sample size limitations and modality imbalance in multi-omics；batch effects disguised as biological signals；training-validation set independence and label leakage；anchor dependency and over-smoothing in integration models；LD-aware genetic integration: colocalization vs LD artifact；cross-platform / cross-cohort / cross-population reproducibility；missing data and asynchronous sampling across omics layers；measurement scale, dynamic range, and normalization incomparability across proteomics/metabolomics/lipidomics；correlation-only analysis without causal or directional evidence</p>
+  </div>
+</div>
+
+<!-- ========== Tab: Evidence Index (universal) ========== -->
+<div id="tab-evidence" class="tab-panel">
+  <input type="text" class="search-box" id="evidence-search" placeholder="搜索证据..." oninput="filterEvidence()">
+  <table id="evidence-table">
+    <thead><tr><th onclick="sortTable(0)">来源</th><th onclick="sortTable(1)">论断</th><th onclick="sortTable(2)">位置</th><th onclick="sortTable(3)">类型</th></tr></thead>
+    <tbody>
+    
+    <tr><td>主要发现</td><td>在配对scRNA和scATAC整合任务中，Seurat v4 WNN、scMDC和scMVP在准确性上表现最佳，而MultiVI和uniPort在可用性和可扩展性上最优。</td><td>page 2439-2440 / Figure 2</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>主要发现</td><td>在配对scRNA和ADT整合任务中，totalVI、Seurat v4 WNN和bindSC综合表现最好；提供批次（batch）信息作为输入能显著提升totalVI和Multigrate的批次校正和生物学保守性指标。</td><td>page 2441 / Figure 3</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>主要发现</td><td>在空间多组学整合中，SpatialGlue在生物学保守性指标上优于Harmony和STAligner等通用批次校正方法，展现了空间多组学专用算法的优势。</td><td>page 2443 / Figure 3g</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>主要发现</td><td>在非配对对角线整合中，GLUE是唯一能处理500,000细胞规模数据集的算法，且在细胞对齐准确性（cell-alignment accuracy）和鲁棒性上全面领先。</td><td>page 2443 / Figure 4</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>主要发现</td><td>在非配对马赛克整合中，MultiVI、Seurat v5 Bridge和StabMap表现最优，且利用配对细胞作为桥梁能显著提升非配对细胞的对齐效果。</td><td>page 2443-2444 / Figure 5</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>主要发现</td><td>部分深度学习模型（如scDEC, scMVP）在多次运行中表现出较高的方差，而设置固定随机种子的模型（如SCALEX, uniPort）及非深度学习方法具有极高的输出稳定性。</td><td>page 2440-2441 / Figure 2d, 2e</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    
+    
+    <tr><td>Figure 1</td><td>展示了配对、非配对对角线、非配对马赛克三种整合任务的定义，以及可用性、准确性、鲁棒性三维评估框架。</td><td>page 2439</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Figure 2</td><td>Seurat v4 WNN, scMDC, scMVP准确性最高；MultiVI, uniPort可用性最好；DCCA和scMVP在插补（imputation）任务中表现优异。</td><td>page 2440</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Figure 3</td><td>totalVI和bindSC在scRNA+ADT中领先，且batch参数对totalVI至关重要。SpatialGlue在空间多组学生物学保守性上优于通用批次校正工具。</td><td>page 2442</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Figure 4</td><td>GAM计算瓶颈导致大多数方法无法处理500k细胞，GLUE是唯一胜出者，且在细胞对齐准确性（FOSCTTM）上全面领先。</td><td>page 2443</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Figure 5</td><td>利用配对细胞作为桥梁的马赛克整合方法（MultiVI, Seurat v5 Bridge）在对齐未配对细胞时，显著优于纯对角线整合方法（如GLUE）。</td><td>page 2443-2444</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    </tbody>
+  </table>
+</div>
+
+</div><!-- container -->
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <img id="lightbox-img" src="" alt="Figure">
+</div>
+
+<footer>
+  Generated by Hlokk v2.2.0 (detailed · benchmark) &nbsp;|&nbsp; 20260609_142115 &nbsp;|&nbsp; Paper ID: 87ab35295fe44679
+</footer>
+
+<script>
+/* Tab switching */
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+  });
+});
+/* Lightbox */
+function openLightbox(src){const lb=document.getElementById('lightbox');document.getElementById('lightbox-img').src=src;lb.classList.add('show');}
+function closeLightbox(){document.getElementById('lightbox').classList.remove('show');}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLightbox();});
+/* Evidence filter */
+function filterEvidence(){
+  const q=document.getElementById('evidence-search').value.toLowerCase();
+  document.querySelectorAll('#evidence-table tbody tr').forEach(tr=>{
+    tr.style.display=tr.textContent.toLowerCase().includes(q)?'':'none';
+  });
+}
+/* Table sort */
+let sortDir={};
+function sortTable(col){
+  const tb=document.querySelector('#evidence-table tbody');
+  const rows=Array.from(tb.rows);
+  sortDir[col]=!sortDir[col];
+  rows.sort((a,b)=>{
+    const at=a.cells[col].textContent,bt=b.cells[col].textContent;
+    return sortDir[col]?at.localeCompare(bt):bt.localeCompare(at);
+  });
+  rows.forEach(r=>tb.appendChild(r));
+}
+</script>
+</body>
+</html>

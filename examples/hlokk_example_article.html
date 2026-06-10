@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hlokk — Scoring gene importance by interpreting single-cell foundation models</title>
+<style>
+:root { --bg:#f8f7f4; --card:#fff; --border:#e2dfd9; --accent:#2d5a7b; --accent2:#4a8c6f;
+  --text:#2c2c2c; --muted:#6b6b6b; --tag-bg:#eef2f7; --warn:#c0792a; --danger:#b04040;
+  --blue:#2d5a7b; --teal:#2a7a6a; --green:#4a8c6f; --orange:#c0792a; --purple:#6b5b8a; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:var(--bg); color:var(--text); line-height:1.65; font-size:15px; }
+.container { max-width:1100px; margin:0 auto; padding:16px 20px; }
+
+/* Header */
+header { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; padding:32px 0 24px; }
+header .container { display:flex; flex-direction:column; gap:8px; }
+header h1 { font-size:1.5em; font-weight:600; line-height:1.35; }
+header .meta { opacity:.85; font-size:.9em; }
+header .meta a { color:#cde; }
+header .tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+header .tag { background:rgba(255,255,255,.18); padding:2px 10px; border-radius:12px; font-size:.8em; }
+
+/* Tabs */
+.tab-bar { background:var(--card); border-bottom:2px solid var(--border); position:sticky; top:0; z-index:100; }
+.tab-bar .container { display:flex; gap:0; overflow-x:auto; }
+.tab-btn { padding:12px 18px; cursor:pointer; border:none; background:none; font-size:.9em;
+  color:var(--muted); border-bottom:3px solid transparent; white-space:nowrap; transition:.15s; }
+.tab-btn:hover { color:var(--text); }
+.tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+.tab-panel { display:none; padding:24px 0; }
+.tab-panel.active { display:block; }
+
+/* Cards */
+.card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:20px; margin-bottom:16px; }
+.card h3 { font-size:1.05em; margin-bottom:10px; color:var(--accent); }
+.card-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; }
+
+/* Reading cipher colors */
+.rc-intro { border-left:4px solid var(--blue); }
+.rc-review { border-left:4px solid var(--teal); }
+.rc-result { border-left:4px solid var(--green); }
+.rc-conclusion { border-left:4px solid var(--orange); }
+.rc-label { display:inline-block; font-weight:700; font-size:.8em; padding:2px 8px;
+  border-radius:4px; margin-bottom:6px; color:#fff; }
+.rc-label.intro { background:var(--blue); }
+.rc-label.review { background:var(--teal); }
+.rc-label.result { background:var(--green); }
+.rc-label.conclusion { background:var(--orange); }
+
+/* Tables */
+table { width:100%; border-collapse:collapse; font-size:.9em; }
+th { background:var(--tag-bg); text-align:left; padding:10px 12px; font-weight:600;
+  border-bottom:2px solid var(--border); position:sticky; top:52px; z-index:5; cursor:pointer; }
+th:hover { background:#dde4ed; }
+td { padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+tr:hover td { background:#faf9f6; }
+
+/* Strength badges */
+.badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:.78em; font-weight:600; }
+.badge-strong { background:#d4edda; color:#155724; }
+.badge-moderate { background:#fff3cd; color:#856404; }
+.badge-weak { background:#f8d7da; color:#721c24; }
+.badge-high { background:#d4edda; color:#155724; }
+.badge-medium { background:#fff3cd; color:#856404; }
+.badge-low { background:#f8d7da; color:#721c24; }
+.badge-stated { background:#d4edda; color:#155724; }
+.badge-inferred { background:#e2d6f3; color:#4a2d7a; }
+
+/* Figures */
+.fig-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(480px,1fr)); gap:20px; }
+.fig-card { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:var(--card); }
+.fig-card .fig-img { background:#f0eeeb; text-align:center; cursor:pointer; max-height:400px; overflow:hidden; }
+.fig-card .fig-img img { width:100%; display:block; object-fit:contain; }
+.fig-card .fig-body { padding:16px; }
+.fig-card .fig-id { font-weight:700; color:var(--accent); margin-bottom:6px; }
+
+/* Collapsible */
+.collapsible { cursor:pointer; user-select:none; }
+.collapsible::after { content:" ▼"; font-size:.7em; color:var(--muted); }
+.collapsible.collapsed::after { content:" ▶"; }
+.coll-body { overflow:hidden; transition:max-height .3s ease; }
+.coll-body.collapsed { max-height:0 !important; }
+
+/* Lightbox */
+.lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:1000;
+  align-items:center; justify-content:center; cursor:pointer; }
+.lightbox.show { display:flex; }
+.lightbox img { max-width:95vw; max-height:95vh; border-radius:4px; }
+
+/* Search */
+.search-box { padding:8px 14px; border:1px solid var(--border); border-radius:8px; width:100%;
+  max-width:400px; margin-bottom:16px; font-size:.9em; }
+
+/* Misc */
+.section-title { font-size:1.15em; font-weight:600; margin:0 0 16px 0; color:var(--text); }
+.text-muted { color:var(--muted); }
+.mb-8 { margin-bottom:8px; }
+.mb-16 { margin-bottom:16px; }
+.list-item { padding:8px 0; border-bottom:1px solid var(--border); }
+.list-item:last-child { border-bottom:none; }
+footer { text-align:center; padding:24px; color:var(--muted); font-size:.82em; }
+
+/* Literature Report */
+.report-section { margin-bottom:28px; }
+.report-section h3 { font-size:1.1em; font-weight:600; color:var(--accent); margin-bottom:10px;
+  padding-bottom:6px; border-bottom:2px solid var(--border); }
+.report-section .report-body { font-size:.95em; line-height:1.8; color:var(--text); }
+.report-section .report-body p { margin-bottom:12px; text-indent:2em; }
+.report-label { display:inline-block; font-weight:700; font-size:.75em; padding:2px 10px;
+  border-radius:4px; margin-bottom:8px; color:#fff; letter-spacing:.5px; }
+.report-label.theme { background:var(--blue); }
+.report-label.review { background:var(--teal); }
+.report-label.gap { background:#8b6bb0; }
+.report-label.result { background:var(--green); }
+.report-label.innovation { background:var(--orange); }
+.report-label.method { background:#5a7a8c; }
+.report-label.strategy { background:#8b5a5a; }
+.report-label.recommend { background:#5a6b8c; }
+.report-divider { border:none; border-top:1px dashed var(--border); margin:24px 0; }
+
+/* Research Recommendations & Reading Strategy */
+.rec-card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:20px; margin-bottom:16px; border-left:4px solid var(--accent); }
+.rec-card h4 { font-size:1em; font-weight:600; color:var(--accent); margin-bottom:8px; }
+.rec-card .rec-body { font-size:.95em; line-height:1.8; color:var(--text); }
+.strategy-card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:20px; margin-bottom:16px; }
+.strategy-card .strategy-tag { display:inline-block; font-weight:700; font-size:.8em;
+  padding:3px 10px; border-radius:4px; color:#fff; margin-right:8px; margin-bottom:8px; }
+.strategy-tag.poc { background:#b04040; }
+.strategy-tag.mop { background:#c0792a; }
+.strategy-tag.rpp { background:#6b5b8a; }
+.strategy-tag.wil { background:#2a7a6a; }
+
+/* Research Threads tree */
+.thread-card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:20px; margin-bottom:16px; border-left:4px solid var(--accent); }
+.thread-card h4 { font-size:1.05em; font-weight:600; color:var(--accent); margin-bottom:12px; cursor:pointer; }
+.thread-card h4::after { content:" ▼"; font-size:.65em; color:var(--muted); }
+.sub-q { margin-left:16px; padding:10px 0; border-bottom:1px solid var(--border); }
+.sub-q:last-child { border-bottom:none; }
+.sub-q-title { font-weight:600; font-size:.95em; margin-bottom:6px; cursor:pointer; }
+.sub-q-title::after { content:" ▼"; font-size:.6em; color:var(--muted); }
+.evidence-pt { margin-left:24px; padding:6px 0; font-size:.9em; }
+.evidence-pt .ev-loc { color:var(--muted); font-size:.82em; }
+
+/* Mode badge */
+.mode-badge { display:inline-block; padding:3px 10px; border-radius:12px;
+  font-size:.75em; font-weight:600; color:#fff; margin-left:8px; }
+.mode-badge.overview { background:var(--teal); }
+.mode-badge.detailed { background:var(--purple); }
+
+/* Doc type badge */
+.dtype-badge { display:inline-block; padding:3px 10px; border-radius:12px;
+  font-size:.75em; font-weight:600; color:#fff; margin-left:8px; }
+.dtype-badge.article { background:var(--blue); }
+.dtype-badge.review { background:var(--teal); }
+.dtype-badge.benchmark { background:var(--orange); }
+.dtype-badge.atlas { background:var(--green); }
+.dtype-badge.commentary { background:var(--purple); }
+
+/* Debate cards */
+.debate-card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:16px; margin-bottom:12px; }
+.debate-card .camp { display:inline-block; padding:2px 8px; border-radius:4px; font-size:.82em; font-weight:600; }
+.camp-a { background:#e8f4fd; color:#1a5276; }
+.camp-b { background:#fde8e8; color:#761a1a; }
+
+@media(max-width:640px) { .fig-grid,.card-grid { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+<div class="container">
+  <h1>Scoring gene importance by interpreting single-cell foundation models
+    <span class="mode-badge detailed">detailed</span>
+    <span class="dtype-badge article">article</span>
+  </h1>
+  <div class="meta">
+    Maxwell P. Gold et al. &nbsp;|&nbsp; Nature Biotechnology, 2026
+     &nbsp;|&nbsp; <a href="开发了SIGnature Python package" target="_blank">代码</a>
+  </div>
+  <div class="tags">
+    <span class="tag">scRNA-seq</span><span class="tag">spatial transcriptomics</span>
+    <span class="tag">聚焦：methods</span>
+    
+  </div>
+</div>
+</header>
+
+<!-- Tab Bar (type-aware labels) -->
+<div class="tab-bar"><div class="container">
+  <button class="tab-btn active" data-tab="overview">概览</button>
+  <button class="tab-btn" data-tab="report">文献阅读汇报</button>
+  <button class="tab-btn" data-tab="cipher">阅读密码</button>
+  <button class="tab-btn" data-tab="figures">图表论证</button>
+  <button class="tab-btn" data-tab="methods">方法工具</button>
+  <button class="tab-btn" data-tab="relevance">个性化解读</button>
+  <button class="tab-btn" data-tab="evidence">证据索引</button>
+</div></div>
+
+<div class="container">
+
+<!-- ========== Tab 1: Overview ========== -->
+<div id="tab-overview" class="tab-panel active">
+  <div class="card">
+    <h3>研究问题</h3>
+    <p>如何在单细胞RNA测序（scRNA-seq）数据中客观、稳健地量化基因的功能重要性，并实现跨数据集的基因集评分和疾病机制发现？</p>
+  </div>
+  <div class="card-grid">
+    <div class="card">
+      <h3>数据与设计</h3>
+      <p class="mb-8"><strong>数据类型：</strong>scRNA-seq, spatial transcriptomics</p>
+      <p class="mb-8"><strong>样本信息：</strong>人类，多种组织（肺、血液、肾脏等），包含412个人类疾病研究（2200万个细胞），以及体外造血干细胞和祖细胞（HSPCs）血清诱导实验</p>
+      <p><strong>实验设计：</strong>计算方法开发与基准测试，跨数据集验证，体外实验验证（KD和败血症血清诱导HSPCs）</p>
+    </div>
+    <div class="card">
+      <h3>数据与代码</h3>
+      <p class="mb-8"><strong>数据可用性：</strong>使用了公共数据集（如CELLxGENE Census, Human Lung Cell Atlas等），分析了412个人类疾病研究（2200万个细胞）</p>
+      <p><strong>代码可用性：</strong>开发了SIGnature Python package</p>
+    </div>
+  </div>
+
+  <!-- Key Findings (universal) -->
+  <div class="section-title">主要发现</div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-strong">strong</span>
+      <span class="badge badge-stated">stated</span>
+      <span class="text-muted" style="font-size:.82em;margin-left:8px;">Page 1-2 / Figure 1 / Figure 2</span>
+    </div>
+    <p>提出SIGnature框架，利用可解释人工智能（XAI）方法（如Integrated Gradients, Input x Gradient, DeepLIFT）计算scRNA-seq基础模型（如SCimilarity, scGPT等）的归因分数（attribution scores），以量化基因对细胞在潜在空间中位置的重要性。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-strong">strong</span>
+      <span class="badge badge-stated">stated</span>
+      <span class="text-muted" style="font-size:.82em;margin-left:8px;">Page 3 / Figure 3d-f</span>
+    </div>
+    <p>归因分数能有效降低技术噪声（如测序深度、核糖体/线粒体基因干扰），并显著提升转录因子（TFs，如FOXP3, GATA3, RORC）等低表达关键调控基因的排名（two-sided Wilcoxon signed-rank test, P < 0.01）。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-strong">strong</span>
+      <span class="badge badge-stated">stated</span>
+      <span class="text-muted" style="font-size:.82em;margin-left:8px;">Page 3-4 / Figure 3i-k / Extended Data Fig. 4-5</span>
+    </div>
+    <p>基于归因分数的非负矩阵分解（NMF）在跨研究数据集中能更稳定地识别生物学相关的基因程序（如Treg特征），其跨随机种子和特征集的一致性显著优于基于表达量的NMF。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-strong">strong</span>
+      <span class="badge badge-stated">stated</span>
+      <span class="text-muted" style="font-size:.82em;margin-left:8px;">Page 4-5 / Figure 4b-d</span>
+    </div>
+    <p>在基因集评分（signature scoring）任务中，平均归因分数在32项测试中的23项取得了最高的F1分数，且跨数据集一致性显著优于Scanpy、ANS、JASMINE和UCell等传统方法。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-strong">strong</span>
+      <span class="badge badge-stated">stated</span>
+      <span class="text-muted" style="font-size:.82em;margin-left:8px;">Page 5-6 / Figure 5a-c</span>
+    </div>
+    <p>通过在2200万个细胞的大规模图谱中查询MS1单核细胞特征，发现该特征与川崎病（KD）、噬血细胞性淋巴组织细胞增多症（HLH）和发热伴血小板减少综合征（SFTS）等多种高炎症疾病存在统计学显著关联。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-strong">strong</span>
+      <span class="badge badge-stated">stated</span>
+      <span class="text-muted" style="font-size:.82em;margin-left:8px;">Page 6 / Figure 5d-g-h</span>
+    </div>
+    <p>体外实验验证了KD患者血清能诱导造血干细胞和祖细胞（HSPCs）产生MS1表型（HLA-DRAlow单核细胞比例显著增加，two-sided mixed linear model, P = 0.003），且临床队列中静脉注射免疫球蛋白（IVIG）治疗后MS1样细胞比例下降（two-sided Wilcoxon signed-rank P < 0.01），但体外IgG处理无直接抑制作用（P = 0.47）。</p>
+  </div>
+  
+
+  <!-- Type-specific overview sections -->
+  
+    <!-- Research Threads (article) -->
+    
+    <div class="section-title">研究线索（层级化论证）</div>
+    <p class="text-muted mb-16">主问题 → 子问题 → 证据点：可追溯的论证链条。</p>
+    
+    <div class="thread-card">
+      <h4 onclick="this.parentElement.querySelector('.thread-body').classList.toggle('collapsed')">
+        <span class="badge badge-moderate">阶段1</span>
+        如何利用单细胞基础模型（scRNA-seq FMs）客观量化基因的功能重要性，并克服传统表达量的技术噪声？
+      </h4>
+      <div class="thread-body">
+      
+      
+      <div class="sub-q">
+        <div class="sub-q-title" onclick="this.nextElementSibling.classList.toggle('collapsed')">归因分数是否能准确捕获细胞身份标记并降低技术噪声？</div>
+        <div class="coll-body">
+        
+        
+        <div class="evidence-pt">
+          <span class="badge badge-strong">strong</span>
+          归因分数显著提升了转录因子（如FOXP3, GATA3）的排名，同时降低了核糖体和线粒体基因的干扰，且与测序深度的相关性远低于传统表达量。
+          <span class="ev-loc">— Page 3 / Figure 3d-h</span>
+        </div>
+        
+        
+        </div>
+      </div>
+      
+      
+      
+      <p style="margin-top:12px;padding:10px 14px;background:var(--tag-bg);border-radius:6px;font-size:.92em;"><strong>Take-home：</strong>通过计算基础模型的归因分数，可以有效剥离测序深度等技术伪影，真实反映基因对细胞身份的生物学贡献。</p>
+      
+      </div>
+    </div>
+    
+    <div class="thread-card">
+      <h4 onclick="this.parentElement.querySelector('.thread-body').classList.toggle('collapsed')">
+        <span class="badge badge-moderate">阶段2</span>
+        归因分数是否能支持跨研究、跨平台的稳健基因程序发现和基因集评分？
+      </h4>
+      <div class="thread-body">
+      
+      
+      <div class="sub-q">
+        <div class="sub-q-title" onclick="this.nextElementSibling.classList.toggle('collapsed')">基于归因的NMF是否比基于表达的NMF更稳定？</div>
+        <div class="coll-body">
+        
+        
+        <div class="evidence-pt">
+          <span class="badge badge-strong">strong</span>
+          在跨研究T细胞数据集中，90%的归因NMF配置稳定识别出Treg相关因子，而表达NMF仅为58%。
+          <span class="ev-loc">— Page 3-4 / Figure 3i-k / Extended Data Figure. 4c</span>
+        </div>
+        
+        
+        </div>
+      </div>
+      
+      <div class="sub-q">
+        <div class="sub-q-title" onclick="this.nextElementSibling.classList.toggle('collapsed')">归因分数在基因集评分任务中是否优于现有工具？</div>
+        <div class="coll-body">
+        
+        
+        <div class="evidence-pt">
+          <span class="badge badge-strong">strong</span>
+          平均归因分数在32项细胞类型分类测试中的23项取得最高F1分数，且跨数据集评分一致性显著优于Scanpy等方法。
+          <span class="ev-loc">— Page 4-5 / Figure 4a / Extended Data Figure. 8</span>
+        </div>
+        
+        
+        </div>
+      </div>
+      
+      
+      
+      <p style="margin-top:12px;padding:10px 14px;background:var(--tag-bg);border-radius:6px;font-size:.92em;"><strong>Take-home：</strong>基于归因分数的矩阵分解和基因集评分在跨数据集比较中展现出卓越的一致性和抗批次效应能力。</p>
+      
+      </div>
+    </div>
+    
+    <div class="thread-card">
+      <h4 onclick="this.parentElement.querySelector('.thread-body').classList.toggle('collapsed')">
+        <span class="badge badge-moderate">阶段3</span>
+        SIGnature能否在海量单细胞图谱中发现未知的跨疾病共享细胞状态？
+      </h4>
+      <div class="thread-body">
+      
+      
+      <div class="sub-q">
+        <div class="sub-q-title" onclick="this.nextElementSibling.classList.toggle('collapsed')">MS1特征在哪些未知疾病中被异常激活？</div>
+        <div class="coll-body">
+        
+        
+        <div class="evidence-pt">
+          <span class="badge badge-strong">strong</span>
+          在412项研究（2200万细胞）中查询发现，MS1特征在KD、SFTS和HLH中显著富集，且SFTS中MS1分数与疾病严重程度正相关，HLH治疗过程中MS1细胞比例下降。
+          <span class="ev-loc">— Page 5-6 / Figure 5c / Extended Data Figure. 9a</span>
+        </div>
+        
+        
+        </div>
+      </div>
+      
+      
+      
+      <p style="margin-top:12px;padding:10px 14px;background:var(--tag-bg);border-radius:6px;font-size:.92em;"><strong>Take-home：</strong>通过大规模图谱查询，成功将MS1单核细胞特征与川崎病、HLH和SFTS等多种高炎症疾病建立统计学关联。</p>
+      
+      </div>
+    </div>
+    
+    <div class="thread-card">
+      <h4 onclick="this.parentElement.querySelector('.thread-body').classList.toggle('collapsed')">
+        <span class="badge badge-moderate">阶段4</span>
+        计算发现的KD与MS1表型关联是否具有体外生物学因果证据？
+      </h4>
+      <div class="thread-body">
+      
+      
+      <div class="sub-q">
+        <div class="sub-q-title" onclick="this.nextElementSibling.classList.toggle('collapsed')">KD血清是否能直接诱导MS1表型？IVIG的作用机制是什么？</div>
+        <div class="coll-body">
+        
+        
+        <div class="evidence-pt">
+          <span class="badge badge-strong">strong</span>
+          KD血清显著增加体外培养中HLA-DRAlow单核细胞比例（P=0.003），但体外添加IgG（IVIG主要成分）无直接抑制作用（P=0.47），提示IVIG可能通过间接机制起效。
+          <span class="ev-loc">— Page 6 / Figure 5g-h</span>
+        </div>
+        
+        
+        </div>
+      </div>
+      
+      
+      
+      <p style="margin-top:12px;padding:10px 14px;background:var(--tag-bg);border-radius:6px;font-size:.92em;"><strong>Take-home：</strong>KD患者血清能在体外诱导造血祖细胞产生MS1样单核细胞，证实了计算预测的生物学机制。</p>
+      
+      </div>
+    </div>
+    
+    
+
+  
+
+  <!-- Limitations (universal) -->
+  
+  <div class="section-title">局限性</div>
+  
+  <div class="list-item">归因分数的质量高度依赖底层基础模型（FM）的训练数据分布。在SCimilarity训练集中罕见或未见的细胞类型（如眼表角膜上皮细胞）上，归因NMF无法提供优于表达量的生物学信号增强。 <span class="text-muted" style="font-size:.82em;">— page 6 / Discussion / Extended Data Figure. 5f</span></div>
+  
+  <div class="list-item">归因分数代表基因表达值经过复杂非线性变换后的梯度贡献，其数值单位缺乏直观的生物学解释（如无法直接等同于转录本丰度）。 <span class="text-muted" style="font-size:.82em;">— page 6 / Discussion</span></div>
+  
+  <div class="list-item">归因分数主要用于解释和评分，可能不适用于传统的scRNA-seq无监督任务（如基于距离的细胞聚类），因为潜在空间的几何结构已被归因计算重新加权。 <span class="text-muted" style="font-size:.82em;">— page 6 / Discussion</span></div>
+  
+  <div class="list-item">体外IgG处理实验未能证实IVIG对MS1细胞的直接抑制作用，表明计算发现的临床治疗响应（IVIG后MS1下降）可能涉及更复杂的体内系统性免疫调节机制，而非单一分子的直接靶向。 <span class="text-muted" style="font-size:.82em;">— page 6 / Results / Figure 5h</span></div>
+  
+  
+  
+  
+</div>
+
+<!-- ========== Tab: Literature Reading Report ========== -->
+<div id="tab-report" class="tab-panel">
+  
+
+  
+  <p class="text-muted mb-16">基于论文全文的结构化阅读汇报，覆盖主题、综述、空白、结果、创新与方法评价。</p>
+  <div class="report-section"><span class="report-label theme">研究主题</span><h3>本文主题与研究动机</h3><div class="report-body"><p>本研究聚焦于单细胞转录组学（scRNA-seq）中基因功能重要性的量化问题。传统方法依赖绝对或相对表达量，易受技术噪声和批次效应干扰，难以跨数据集泛化。本文提出SIGnature框架，创新性地将可解释人工智能（XAI）中的归因方法应用于单细胞基础模型（FMs），通过计算基因对细胞潜在空间位置的梯度贡献，生成标准化、抗噪的归因分数（attribution scores）。</p></div></div>
+  <hr class="report-divider">
+  <div class="report-section"><span class="report-label review">文献综述</span><h3>对现有研究的综述</h3><div class="report-body"><p>单细胞基础模型（如scGPT, SCimilarity, scFoundation）近年来在细胞注释和扰动预测中展现出强大能力，但其“黑盒”特性限制了生物学机制的提取。同时，基因集评分工具（如Scanpy, GSVA, UCell）多基于表达量排名或背景校正，在跨平台整合时表现不佳。XAI技术（如Integrated Gradients）在图像和自然语言处理中已成熟，但在高维稀疏的scRNA-seq数据中的应用仍处于起步阶段，且缺乏系统性框架支持大规模图谱查询。</p></div></div>
+  <div class="report-section"><span class="report-label gap">研究空白</span><h3>现有文献不足与研究空白</h3><div class="report-body"><p>现有文献缺乏一种能够统一衡量基因功能重要性、内在抵抗技术伪影，并能在数千个公开单细胞实验中进行无缝跨数据集比较的计算度量。此外，传统方法难以有效捕获低表达但具关键调控作用的转录因子（TFs）信号，导致跨疾病共享细胞状态（如炎症髓系表型）的发现受限。</p></div></div>
+  <div class="report-section"><span class="report-label gap">理论依据</span><h3>本研究的理论依据</h3><div class="report-body"><p>基础模型在海量数据训练过程中编码了丰富的生物学先验知识。如果FM的潜在空间具有生物学意义，那么利用XAI计算输入基因对嵌入位置的归因，即可剥离技术噪声，提取出模型认为对细胞身份和功能最关键的基因特征。这种基于模型内在逻辑的度量天然具备跨数据集标准化的潜力。</p></div></div>
+  <hr class="report-divider">
+  <div class="report-section"><span class="report-label result">研究结果</span><h3>主要研究结果</h3><div class="report-body"><p>研究首先通过基准测试证实，归因分数（特别是SCimilarity结合IG方法）在保留细胞类型标记和TFs信号的同时，显著降低了与测序深度的相关性。随后，基于归因矩阵的NMF在跨研究T细胞数据中稳定识别出Treg程序，一致性远超表达量NMF。在基因集评分任务中，平均归因分数在多数分类测试中达到SOTA性能。应用层面，SIGnature在2200万细胞图谱中快速查询MS1特征，不仅复现了其在败血症和重症COVID-19中的激活，还首次发现其与川崎病（KD）、HLH和SFTS的统计学关联。最后，体外HSPC培养实验证实KD患者血清能直接诱导MS1样单核细胞生成，为计算发现提供了因果机制证据。</p></div></div>
+  <div class="report-section"><span class="report-label result">论证结构</span><h3>分论点与核心主题的关系</h3><div class="report-body"><p>论证链条严密：从数学直觉（归因=潜在空间位移贡献）出发，经过严格的技术基准测试（抗噪性、TF富集度），过渡到下游任务验证（跨数据集NMF、基因集评分），最终落脚于大规模生物学发现（MS1跨疾病关联）和体外实验验证。各阶段环环相扣，阴性对照（如表达量NMF、IgG体外处理）设置合理。</p></div></div>
+  <div class="report-section"><span class="report-label result">文献对照</span><h3>与现有文献一致的结果</h3><div class="report-body"><p>归因分数对TFs信号的增强作用与单细胞调控网络推断的已知挑战一致；MS1特征在败血症和COVID-19中的富集复现了Reyes等人的开创性工作；IVIG治疗后MS1细胞比例下降的临床观察与现有KD队列转录组研究相符。</p></div></div>
+  <div class="report-section"><span class="report-label innovation">核心创新</span><h3>核心创新点</h3><div class="report-body"><p>首次系统性构建了基于scRNA-seq FM归因分数的基因重要性量化框架（SIGnature）；证明了归因分数可作为内在的批次效应校正器，实现无需额外对齐的跨数据集基因集评分；发现了MS1炎症单核细胞特征在KD、HLH和SFTS中的共享病理机制，并提供了体外血清诱导的因果证据。</p></div></div>
+  <hr class="report-divider">
+  <div class="report-section"><span class="report-label innovation">未来展望</span><h3>对未来研究的建议</h3><div class="report-body"><p>作者建议未来研究应深入探讨FM架构、训练数据分布和损失函数对归因输出质量的根本影响；探索更高效的归因算法以适应更大规模的图谱；并将该框架扩展至空间转录组和多组学模态的整合分析中。</p></div></div>
+  <hr class="report-divider">
+  <div class="report-section"><span class="report-label method">数据与方法</span><h3>数据来源详述</h3><div class="report-body"><p>研究整合了超过412项人类疾病研究，涵盖2200万个细胞，数据来源于CELLxGENE Census及各类公共存储库（GEO/ArrayExpress）。基准测试使用了包含13种血液细胞类型、肺部图谱（HLCA）、眼表图谱及PBMC等高质量注释数据集。体外实验使用了KD患者、发热对照及败血症患者的临床血清样本。</p></div></div>
+  <div class="report-section"><span class="report-label method">方法评价</span><h3>分析方法的准确性、适用性与创新性</h3><div class="report-body"><p>Integrated Gradients方法的选择兼顾了理论完备性和计算可行性；NMF和基因集评分的对比实验设计严谨，涵盖了监督和无监督场景；体外血清诱导实验直接验证了计算预测，提升了研究的生物学价值。然而，对FM训练数据泄露风险的评估（如在HLCA上的表现）仍需更严格的留一法交叉验证。</p></div></div>
+
+  
+
+  
+
+  <!-- Reading Strategy (universal, QoderWork-generated) -->
+  
+</div>
+
+<!-- ========== Tab: Reading Cipher (universal) ========== -->
+<div id="tab-cipher" class="tab-panel">
+  <p class="text-muted mb-16">学术论文叙事结构解码：从前言到结论的完整论证链路。</p>
+  <div class="card rc-intro"><span class="rc-label intro">前言 · WTD</span><h3>他们要做什么</h3><p>开发一种基于单细胞基础模型归因分数的框架（SIGnature），用于稳健地量化基因重要性、进行跨数据集的基因集评分，并发现跨疾病的共享细胞状态。</p></div>
+  <div class="card rc-review"><span class="rc-label review">综述 · SPL</span><h3>现有文献综述</h3><p>传统的差异表达和基因集评分方法（如DESeq2, GSEA, GSVA, Scanpy, Seurat）依赖于相对表达量变化，且现有的归一化和数据集整合方法难以有效应用于数千个公开的单细胞转录组实验。</p></div>
+  <div class="card rc-review"><span class="rc-label review">综述 · CPL</span><h3>现有文献批评</h3><p>绝对表达量不是基因功能重要性的可靠指标（如转录因子低表达但关键，线粒体基因高表达但功能局限）；现有评分方法受限于特定研究的设计、细胞类型组成和技术伪影（如测序深度、批次效应），难以跨实验泛化。</p></div>
+  <div class="card rc-review"><span class="rc-label review">综述 · GAP</span><h3>研究空白</h3><p>缺乏一种能够客观衡量基因功能重要性、抵抗技术伪影，并能在大规模、多来源scRNA-seq图谱中进行可扩展、稳健的跨数据集基因集评分的计算方法。</p></div>
+  <div class="card rc-review"><span class="rc-label review">综述 · RAT</span><h3>理论依据</h3><p>可解释人工智能（XAI）中的归因方法可以量化输入特征对模型预测的贡献，将其应用于在海量scRNA-seq数据上训练的基础模型（FMs），能够利用模型编码的生物学功能，提供标准化且抗噪的基因重要性度量。</p></div>
+  <div class="card rc-result"><span class="rc-label result">结果 · ROF</span><h3>研究结果</h3><div class="list-item">归因分数（特别是SCimilarity结合Integrated Gradients方法）能准确捕获细胞身份标记和调控基因，同时降低技术伪影的影响。</div><div class="list-item">基于归因的NMF在跨研究基因程序发现中比基于表达的NMF更稳定、更具生物学可解释性。</div><div class="list-item">平均归因分数在细胞类型预测和基因集激活评分中优于ANS, Scanpy, JASMINE, UCell等现有方法。</div><div class="list-item">大规模图谱查询揭示了MS1单核细胞特征在KD、SFTS和HLH等高炎症疾病中的异常激活。</div></div>
+  <div class="card rc-result"><span class="rc-label result">结果 · RCL</span><h3>与现有文献一致</h3><div class="list-item">确认了MS1特征与败血症和重症COVID-19的已知关联（Reyes et al.）。</div><div class="list-item">确认了转录因子（如FOXP3, GATA3, RORC）在特定T细胞亚群（Tregs, Th2, Th17）中的关键调控作用。</div></div>
+  <div class="card rc-result"><span class="rc-label result">结果 · RTC</span><h3>与现有文献相反</h3><div class="list-item">发现Scanpy等传统表达评分方法在跨数据集比较时会出现严重偏差（如将CD4+ T细胞的评分错误地高于真实的CD8+ T细胞），而归因分数能纠正这一现象并提供一致的跨研究评分。</div></div>
+  <div class="card rc-conclusion"><span class="rc-label conclusion">结论 · WTDD</span><h3>他们做了什么</h3><p>开发了SIGnature Python包，对多种FMs和XAI方法进行了基准测试，利用归因分数进行了跨数据集NMF和基因集评分，并通过体外血清诱导实验验证了KD与MS1表型的生物学关联。</p></div>
+  <div class="card rc-conclusion"><span class="rc-label conclusion">结论 · RFW</span><h3>未来建议</h3><div class="list-item">改进归因计算方法以提高计算效率和可解释性。</div><div class="list-item">探索基础模型的训练数据、损失函数和架构对归因输出质量的根本影响。</div><div class="list-item">将归因框架扩展到其他组学模态和更复杂的生物学问题。</div></div>
+</div>
+
+<!-- ========== Tab: Figure Arguments (type-branched) ========== -->
+<div id="tab-figures" class="tab-panel">
+  
+  <div class="fig-grid">
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Figure. 1e — page 2
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Figure. 1e <span class="badge badge-moderate">methodological_demonstration</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>展示SIGnature框架的大规模图谱查询工作流，说明预计算归因分数如何实现分钟级的基因集搜索。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>直接支撑SIGnature作为大规模图谱分析工具的核心定位。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>确立了该方法在计算效率和可扩展性上的核心优势，填补了从单细胞归因计算到大规模疾病关联发现的逻辑桥梁。</p>
+          <p class="mb-8"><strong>数据来源：</strong>概念性流程图，无具体数据。</p>
+          <p class="mb-8"><strong>方法：</strong>Workflow design, Precomputed attribution indexing.</p>
+          <p><strong>局限：</strong>未展示预计算阶段的存储开销和内存占用评估。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Figure. 2 — page 3
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Figure. 2 <span class="badge badge-moderate">methodological_demonstration</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>对多种基础模型（scFoundation, scGPT, SCimilarity等）和归因方法（IG, IxG, DL）进行计算时间、抗噪性和生物学信号保留的基准测试。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>为后续所有下游分析奠定方法学选择和参数配置的证据基础。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>证明了选择SCimilarity结合IG方法的合理性，确立了归因分数相对于原始表达量的技术优越性。</p>
+          <p class="mb-8"><strong>数据来源：</strong>13种血液细胞类型数据集，有丝分裂成纤维细胞数据集。</p>
+          <p class="mb-8"><strong>方法：</strong>Benchmarking, Spearman correlation, Log2 fold change calculation.</p>
+          <p><strong>局限：</strong>基准测试主要集中于免疫和成纤维细胞，对复杂实体组织细胞的泛化性评估不足。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Figure 2 — page 3
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Figure 2 <span class="badge badge-moderate">methodological_demonstration</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>与Figure. 2为同一图表的重复引用，展示基准测试结果。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>同Figure. 2。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>同Figure. 2。</p>
+          <p class="mb-8"><strong>数据来源：</strong>同Figure. 2。</p>
+          <p class="mb-8"><strong>方法：</strong>同Figure. 2。</p>
+          <p><strong>局限：</strong>同Figure. 2。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Figure. 3a — page 3
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Figure. 3a <span class="badge badge-moderate">methodological_demonstration</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>图解说明如何通过插值表达谱计算梯度，进而生成归因分数的数学过程。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>解释了SIGnature底层算法（Integrated Gradients）的作用机制。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>提供了归因计算的核心数学直觉，使读者理解基因表达如何映射为潜在空间位移的贡献度。</p>
+          <p class="mb-8"><strong>数据来源：</strong>概念性示意图。</p>
+          <p class="mb-8"><strong>方法：</strong>Integrated Gradients (IG) mathematical formulation.</p>
+          <p><strong>局限：</strong>未详细说明多维嵌入空间（multi-dimensional embeddings）降维或求和层（summation layer）的具体数学推导。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Figure 3d — page 3
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Figure 3d <span class="badge badge-moderate">mechanism_validation</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>展示在16种肺细胞类型中，归因分数显著提升了细胞类型相关转录因子（TFs）的排名，同时压制了线粒体和核糖体基因。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>验证了归因分数作为“基因功能重要性”代理指标的生物学有效性。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>提供了归因分数能够捕获低表达关键调控基因（生物学机制核心）的直接统计证据。</p>
+          <p class="mb-8"><strong>数据来源：</strong>肺部单细胞图谱数据集。</p>
+          <p class="mb-8"><strong>方法：</strong>Rank percentile comparison, two-sided Wilcoxon signed-rank test.</p>
+          <p><strong>局限：</strong>仅展示了平均排名百分位，未提供单个关键TF（如特定疾病驱动基因）的具体归因绝对值变化。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Figure. 4a — page 5
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Figure. 4a <span class="badge badge-moderate">mechanism_validation</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>热图展示PBMC数据集中，各细胞类型标记基因的平均归因分数在对应细胞类型中特异性升高。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>支撑SIGnature在基因集激活量化任务中的核心应用。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>证明了平均归因分数可以直接作为基因集评分（signature scoring）的有效指标，且具备高度的细胞类型特异性。</p>
+          <p class="mb-8"><strong>数据来源：</strong>PBMC单细胞数据集（570,249 cells）。</p>
+          <p class="mb-8"><strong>方法：</strong>Mean attribution score calculation, Heatmap visualization.</p>
+          <p><strong>局限：</strong>热图颜色刻度未提供具体的归因分数物理意义解释，分数大小难以直接转化为生物学活性单位。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Figure. 5c — page 6
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Figure. 5c <span class="badge badge-moderate">clinical_relevance</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>展示HLH患者在接受nivolumab治疗过程中，MS1样单核细胞比例随时间推移而下降的动态变化。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>将计算发现的MS1特征与真实的临床疾病进程和治疗干预联系起来。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>提供了MS1特征与疾病治疗响应相关的纵向临床队列证据，增强了该特征作为疾病生物标志物的可信度。</p>
+          <p class="mb-8"><strong>数据来源：</strong>HLH患者纵向单细胞测序数据集。</p>
+          <p class="mb-8"><strong>方法：</strong>Longitudinal single-cell tracking, MS1 hit percentage calculation.</p>
+          <p><strong>局限：</strong>仅为单个患者的纵向数据（n=1），缺乏群体水平的统计学显著性检验。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Figure. 6a — page N/A (Truncated)
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Figure. 6a <span class="badge badge-moderate">mechanism_validation</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>文本截断未提供Figure 6的具体内容。推测为后续机制验证或空间转录组/多组学层面的MS1特征分布图。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>补充疾病机制的组织微环境或分子通路层面的证据。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>在完整论文中可能用于补充体外实验的分子机制或组织空间定位证据。</p>
+          <p class="mb-8"><strong>数据来源：</strong>文本截断，未提供。</p>
+          <p class="mb-8"><strong>方法：</strong>文本截断，未提供。</p>
+          <p><strong>局限：</strong>文本截断导致证据链在此处缺失。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Tab15 — page 2 (Reference 15)
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Tab15 <span class="badge badge-moderate">methodological_demonstration</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>此ID实为正文中对scTab模型参考文献[15]的OCR误识别。指代使用scTab数据集训练的自监督基础模型。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>支撑基础模型架构和训练目标对归因输出质量影响的论证。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>作为基准测试中的重要对比模型之一，证明了不同训练策略（自监督vs监督）对归因质量的影响。</p>
+          <p class="mb-8"><strong>数据来源：</strong>scTab数据集。</p>
+          <p class="mb-8"><strong>方法：</strong>Self-supervised learning, Fine-tuning.</p>
+          <p><strong>局限：</strong>OCR解析错误导致图表ID混淆，实际无此独立表格。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Table 1 — page N/A (Inferred Supplementary Table 1)
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Table 1 <span class="badge badge-moderate">methodological_demonstration</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>正文未明确提供Table 1。推测指代Supplementary Table 1，列出了用于基准测试和图谱查询的所有scRNA-seq数据集元数据。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>支撑大规模跨数据集分析的可靠性。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>提供数据来源的透明度和可重复性基础。</p>
+          <p class="mb-8"><strong>数据来源：</strong>412项人类疾病研究（2200万细胞）。</p>
+          <p class="mb-8"><strong>方法：</strong>Data curation, Metadata annotation.</p>
+          <p><strong>局限：</strong>正文中缺乏对数据批次效应预处理步骤的详细表格说明。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        table 13 — page 2 (Reference 13)
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">table 13 <span class="badge badge-moderate">methodological_demonstration</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>此ID实为正文中对scGPT模型参考文献[13]的OCR误识别。指代scGPT基础模型。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>论证模型架构对归因计算效率和性能的影响。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>作为Transformer架构的代表模型参与基准测试，与MLP架构（SCimilarity）形成对比。</p>
+          <p class="mb-8"><strong>数据来源：</strong>scGPT预训练权重。</p>
+          <p class="mb-8"><strong>方法：</strong>Transformer-based foundation model evaluation.</p>
+          <p><strong>局限：</strong>OCR解析错误，实际无此独立表格。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Extended Data Figure. 1 — page N/A (Extended Data)
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Extended Data Figure. 1 <span class="badge badge-moderate">methodological_demonstration</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>展示用于基准测试和下游分析的多个独立scRNA-seq数据集的UMAP降维和细胞类型注释。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>为跨数据集泛化性提供数据基础支撑。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>证明所选数据集的多样性和细胞类型覆盖度，确保基准测试结论的普适性。</p>
+          <p class="mb-8"><strong>数据来源：</strong>多个公开scRNA-seq数据集。</p>
+          <p class="mb-8"><strong>方法：</strong>UMAP dimensionality reduction, Cell type annotation.</p>
+          <p><strong>局限：</strong>未详细说明各数据集间的测序平台差异（如10x v2 vs v3）对归因的具体影响。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Extended Data Figure. 2 — page N/A (Extended Data)
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Extended Data Figure. 2 <span class="badge badge-moderate">methodological_demonstration</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>补充展示不同归因方法（DL, IG, IxG）在不同FM上的详细性能指标（如标记基因富集度、计算时间）。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>巩固SIGnature底层算法选择的合理性。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>提供比主图2更详尽的统计细节，增强方法选择的稳健性。</p>
+          <p class="mb-8"><strong>数据来源：</strong>基准测试数据集。</p>
+          <p class="mb-8"><strong>方法：</strong>Detailed benchmarking metrics.</p>
+          <p><strong>局限：</strong>缺乏对归因分数分布偏态的统计描述。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Extended Data Figure. 3a — page N/A (Extended Data)
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Extended Data Figure. 3a <span class="badge badge-moderate">mechanism_validation</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>展示在多种非免疫细胞群体中，归因分数同样能有效区分细胞类型标记基因与管家基因（如线粒体基因）。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>扩展了SIGnature适用范围的边界。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>证明归因分数的抗噪和生物学信号增强能力不局限于血液/免疫细胞，具有跨组织泛化性。</p>
+          <p class="mb-8"><strong>数据来源：</strong>多组织单细胞数据集。</p>
+          <p class="mb-8"><strong>方法：</strong>Gene family rank comparison.</p>
+          <p><strong>局限：</strong>未针对高度异质性的肿瘤微环境细胞进行专门验证。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Extended Data Figure. 4c — page N/A (Extended Data)
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Extended Data Figure. 4c <span class="badge badge-moderate">negative_control</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>展示基于传统归一化表达量的NMF结果，因子往往难以解释且跨研究一致性差。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>通过对比凸显归因分数在降维和特征提取上的优越性。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>作为阴性对照，反衬出基于归因分数的NMF在跨数据集基因程序发现中的决定性优势。</p>
+          <p class="mb-8"><strong>数据来源：</strong>跨研究T细胞数据集。</p>
+          <p class="mb-8"><strong>方法：</strong>Expression-based NMF.</p>
+          <p><strong>局限：</strong>未尝试使用先进的批次校正工具（如Harmony, scVI）预处理表达量后再进行NMF对比。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Extended Data Figure. 5a — page N/A (Extended Data)
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Extended Data Figure. 5a <span class="badge badge-moderate">mechanism_validation</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>在人类肺细胞图谱（HLCA）中，归因衍生的NMF因子与细胞类型注释高度相关，而与研究来源（批次）相关性极低。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>支撑SIGnature无需额外批次校正即可实现跨数据集整合的核心主张。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>提供了归因分数能够内在消除批次效应、保留生物学变异的直接统计学证据。</p>
+          <p class="mb-8"><strong>数据来源：</strong>Human Lung Cell Atlas (HLCA)。</p>
+          <p class="mb-8"><strong>方法：</strong>One-sided Mann-Whitney U-test, Factor-trait correlation.</p>
+          <p><strong>局限：</strong>HLCA中的细胞类型在SCimilarity训练集中过度代表，可能存在信息泄露或过拟合倾向。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Extended Data Figure. 6a — page N/A (Extended Data)
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Extended Data Figure. 6a <span class="badge badge-moderate">mechanism_validation</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>补充展示PBMC数据集中更多细胞类型的标记基因归因分数分布，证实特异性。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>巩固归因评分作为通用基因集激活度量工具的可靠性。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>扩展主图4a的结论，确保基因集评分在稀有细胞类型中依然有效。</p>
+          <p class="mb-8"><strong>数据来源：</strong>PBMC数据集。</p>
+          <p class="mb-8"><strong>方法：</strong>Mean attribution score distribution analysis.</p>
+          <p><strong>局限：</strong>未评估在极度稀疏数据（如低UMI细胞）中的评分稳定性。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Extended Data Figure. 7 — page N/A (Extended Data)
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Extended Data Figure. 7 <span class="badge badge-moderate">mechanism_validation</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>展示在模拟的空间转录组（spot-level）数据中，归因分数与细胞类型比例呈正相关。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>探索归因分数在多模态/空间数据中的泛化能力。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>将SIGnature的应用潜力从单细胞分辨率扩展至空间转录组模态，证明其在混合信号解卷积中的潜力。</p>
+          <p class="mb-8"><strong>数据来源：</strong>模拟空间转录组数据。</p>
+          <p class="mb-8"><strong>方法：</strong>Simulated spot-level transcriptomics, Correlation analysis.</p>
+          <p><strong>局限：</strong>仅使用模拟数据，缺乏真实高分辨率空间转录组（如Xenium, CosMx）的实验验证。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Extended Data Figure. 8 — page N/A (Extended Data)
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Extended Data Figure. 8 <span class="badge badge-moderate">mechanism_validation</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>详细展示监督和无监督分类任务中，归因评分与其他方法（Scanpy, UCell等）的F1分数对比。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>量化SIGnature在下游机器学习任务中的性能增益。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>提供全面的分类性能基准，确立归因评分在细胞类型注释和状态识别中的SOTA地位。</p>
+          <p class="mb-8"><strong>数据来源：</strong>多数据集细胞类型分类任务。</p>
+          <p class="mb-8"><strong>方法：</strong>Logistic Regression, F1 score calculation, Cross-validation.</p>
+          <p><strong>局限：</strong>未评估在跨物种或跨组织细胞类型映射任务中的表现。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Extended Data Figure. 9a — page N/A (Extended Data)
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Extended Data Figure. 9a <span class="badge badge-moderate">phenomenon_establishment</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>展示MS1基因特征在髓系细胞（单核/巨噬细胞）中的特异性富集，证明后续聚焦髓系细胞的合理性。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>确保疾病关联发现的生物学特异性。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>为大规模图谱查询设定了正确的细胞类型过滤条件，避免假阳性。</p>
+          <p class="mb-8"><strong>数据来源：</strong>412项人类疾病研究图谱。</p>
+          <p class="mb-8"><strong>方法：</strong>Cell-type specific signature enrichment analysis.</p>
+          <p><strong>局限：</strong>未探讨MS1特征在非髓系细胞（如内皮或成纤维细胞）中是否存在低水平但具病理意义的激活。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Extended Data Figure. 10 — page N/A (Extended Data)
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Extended Data Figure. 10 <span class="badge badge-moderate">mechanism_validation</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>展示KD数据集NMF识别出的因子4与已知败血症/COVID-19 MS1特征的高度相关性。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>双重验证了跨疾病共享炎症机制的可靠性。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>通过无监督方法（NMF）独立验证了基于监督查询（SIGnature）发现的KD-MS1关联，形成证据闭环。</p>
+          <p class="mb-8"><strong>数据来源：</strong>KD单核细胞scRNA-seq数据集。</p>
+          <p class="mb-8"><strong>方法：</strong>Consensus NMF, Pearson/Spearman correlation of factor loadings.</p>
+          <p><strong>局限：</strong>相关性分析未排除共同的技术批次效应干扰（尽管NMF本身有一定抗噪性）。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Supplementary Table 1 — page N/A (Supplementary)
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Supplementary Table 1 <span class="badge badge-moderate">methodological_demonstration</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>列出所有用于基准测试和图谱查询的scRNA-seq数据集详细信息（GEO/ArrayExpress ID、细胞数、组织、疾病）。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>支撑大规模跨疾病分析的数据基础。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>保证研究的可重复性和数据透明度。</p>
+          <p class="mb-8"><strong>数据来源：</strong>公共数据库。</p>
+          <p class="mb-8"><strong>方法：</strong>Data mining, Metadata standardization.</p>
+          <p><strong>局限：</strong>缺乏对各数据集质控标准（如线粒体基因阈值）统一性的详细说明。</p>
+        
+      </div>
+    </div>
+    
+    <div class="fig-card">
+      
+      <div class="fig-img" style="padding:40px;color:var(--muted);font-size:.9em;">
+        Supplementary Table 2 — page N/A (Supplementary)
+      </div>
+      
+      <div class="fig-body">
+        <div class="fig-id">Supplementary Table 2 <span class="badge badge-moderate">methodological_demonstration</span></div>
+        
+          <p class="mb-8"><strong>分论点：</strong>详细记录各基础模型的架构参数、训练目标及归因方法的超参数配置和基准测试原始数值。</p>
+          <p class="mb-8"><strong>与核心主题关系：</strong>确保SIGnature框架计算过程的透明度和可复现性。</p>
+          <p class="mb-8"><strong>论证必要性：</strong>为方法学复现和后续模型改进提供精确的参数基线。</p>
+          <p class="mb-8"><strong>数据来源：</strong>模型配置与基准测试结果。</p>
+          <p class="mb-8"><strong>方法：</strong>Hyperparameter documentation.</p>
+          <p><strong>局限：</strong>未提供不同硬件环境（GPU型号）下的计算时间波动范围。</p>
+        
+      </div>
+    </div>
+    
+  </div>
+  
+</div>
+
+<!-- ========== Tab: Methods/Design (type-branched) ========== -->
+<div id="tab-methods" class="tab-panel">
+
+  
+    <!-- Article: core_methods table -->
+    <div class="section-title">核心方法流程</div>
+    
+    <table>
+      <thead><tr><th>方法</th><th>工具</th><th>版本</th><th>关键参数</th><th>用途</th><th>对应结果</th><th>位置</th></tr></thead>
+      <tbody>
+      
+      <tr>
+        <td><strong>Integrated Gradients (IG) for Attribution Calculation</strong></td><td>SIGnature package / Captum (inferred)</td><td>-</td>
+        <td>interpolation_steps=50 (standard for IG); baseline=zero expression vector</td>
+        <td>计算每个基因对单细胞基础模型潜在空间嵌入位置的贡献度，生成归因分数。</td>
+        <td>Figure. 3a, Figure. 2</td>
+        <td class="text-muted">page 2 / Methods / Figure 3a</td>
+      </tr>
+      
+      <tr>
+        <td><strong>Nonnegative Matrix Factorization (NMF)</strong></td><td>scikit-learn (inferred) / SIGnature package</td><td>-</td>
+        <td>initialization=random; components=varied for stability testing</td>
+        <td>在跨研究归因矩阵上识别稳健的、生物学相关的基因程序（如Treg特征）。</td>
+        <td>Figure 3d, Extended Data Figure. 4c, Extended Data Figure. 10</td>
+        <td class="text-muted">page 3-4 / Methods</td>
+      </tr>
+      
+      <tr>
+        <td><strong>Signature Scoring via Mean Attribution</strong></td><td>SIGnature package</td><td>-</td>
+        <td>aggregation=mean; gene_set=predefined marker lists or MS1 signature</td>
+        <td>量化已知基因集（如细胞类型标记、MS1特征）在单个细胞中的集体激活水平。</td>
+        <td>Figure. 4a, Extended Data Figure. 8</td>
+        <td class="text-muted">page 4-5 / Methods</td>
+      </tr>
+      
+      <tr>
+        <td><strong>In vitro HSPC Serum Induction Assay</strong></td><td>Flow cytometry / Cell culture</td><td>-</td>
+        <td>cell_type=Hematopoietic stem and progenitor cells (HSPCs); readout=HLA-DRAlow monocyte percentage</td>
+        <td>验证KD患者血清是否能在体外诱导产生MS1样单核细胞表型。</td>
+        <td>Figure 5g, Figure 5h</td>
+        <td class="text-muted">page 6 / Methods / Figure 5g-h</td>
+      </tr>
+      
+      </tbody>
+    </table>
+    
+    
+    <div class="section-title" style="margin-top:24px;">统计方法</div>
+    <table>
+      <thead><tr><th>检验</th><th>校正</th><th>阈值</th><th>场景</th></tr></thead>
+      <tbody>
+      <tr><td><strong>two-sided Wilcoxon signed-rank test</strong></td><td>None mentioned for this specific test</td><td>P < 0.01</td><td>用于比较同一细胞内基因家族（如TFs vs 线粒体基因）在归因分数和表达量排名百分位上的差异（Figure 3d-f）。</td></tr><tr><td><strong>two-sided paired t-test</strong></td><td>None</td><td>P < 0.05</td><td>用于比较Treg因子使用率的跨组织差异，以及体外IgG处理前后HLA-DRAlow单核细胞比例的变化（Figure 3k, Figure 5h）。</td></tr><tr><td><strong>one-sided Mann-Whitney U-test</strong></td><td>Adjusted P-value (method not specified, likely Benjamini-Hochberg)</td><td>adjusted P < 0.01</td><td>用于评估归因NMF因子与细胞类型注释或研究来源（批次）之间的关联强度差异（Extended Data Figure. 5）。</td></tr><tr><td><strong>two-sided mixed linear model</strong></td><td>No adjustments for multiple comparisons</td><td>P < 0.05</td><td>用于分析体外血清诱导实验中，KD血清与发热对照对单核细胞生成和MS1表型比例的影响，考虑了生物学重复的随机效应（Figure 5g）。</td></tr><tr><td><strong>Spearman correlation</strong></td><td>None</td><td>rho values reported</td><td>用于评估标记基因表达/归因与测序深度（UMI counts）之间的相关性（Figure 3g, Figure 2）。</td></tr>
+      </tbody>
+    </table>
+    
+
+  
+
+  <!-- Tools summary (universal, if present) -->
+  
+  <div class="section-title" style="margin-top:24px;">工具汇总</div>
+  <table>
+    <thead><tr><th>工具</th><th>版本</th><th>用途</th><th>链接</th></tr></thead>
+    <tbody>
+    
+    <tr><td><strong>SIGnature</strong></td><td>-</td><td>本文开发的核心Python包，用于计算scRNA-seq FM归因分数、执行NMF和基因集评分。</td><td><a href="GitHub (implied)" target="_blank">链接</a></td></tr>
+    
+    <tr><td><strong>SCimilarity</strong></td><td>-</td><td>作为主要的单细胞基础模型（FM），用于生成细胞嵌入并计算归因分数。</td><td>-</td></tr>
+    
+    <tr><td><strong>scGPT</strong></td><td>-</td><td>参与基准测试的Transformer架构单细胞基础模型。</td><td>-</td></tr>
+    
+    <tr><td><strong>scFoundation</strong></td><td>-</td><td>参与基准测试的单细胞基础模型。</td><td>-</td></tr>
+    
+    <tr><td><strong>Scanpy</strong></td><td>-</td><td>作为传统基因集评分（score_genes）和表达量分析的基线对比工具。</td><td>-</td></tr>
+    
+    <tr><td><strong>UCell / JASMINE / ANS</strong></td><td>-</td><td>作为基于排名或背景的基因集评分基线方法参与对比。</td><td>-</td></tr>
+    
+    </tbody>
+  </table>
+  
+</div>
+
+<!-- ========== Tab: Personalized Relevance (type-branched) ========== -->
+<div id="tab-relevance" class="tab-panel">
+  
+  <!-- Pain point matches (universal structure) -->
+  
+  <div class="section-title">痛点匹配</div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-high">high</span>
+      <strong style="margin-left:8px;">interpretable deep learning for omics foundation models</strong>
+    </div>
+    <p>本文直接回应了该痛点，提出利用Integrated Gradients等XAI方法解析scRNA-seq基础模型的潜在空间，将黑盒嵌入转化为可解释的基因重要性分数（归因分数），为组学基础模型的可解释性提供了标准化范式。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-high">high</span>
+      <strong style="margin-left:8px;">batch effect correction across multi-omics protocols / cross-platform reproducibility</strong>
+    </div>
+    <p>论文证明归因分数天然具备抵抗测序深度和批次效应的能力。通过将细胞映射到统一FM的潜在空间并计算归因，实现了无需传统批次校正（如Harmony）的跨数据集基因集评分和NMF，为解决跨平台可重复性提供了新思路。</p>
+  </div>
+  
+  <div class="card">
+    <div class="mb-8">
+      <span class="badge badge-high">high</span>
+      <strong style="margin-left:8px;">disease-associated cell state identification</strong>
+    </div>
+    <p>通过SIGnature框架在2200万细胞图谱中查询MS1特征，成功识别出KD、HLH等疾病中共享的异常炎症单核细胞状态，展示了该方法在大规模队列中挖掘罕见或跨疾病病理细胞状态的强大能力。</p>
+  </div>
+  
+  
+
+  <!-- Type-specific relevance sections -->
+  
+    <div class="section-title">可迁移方法</div><div class="card"><div class="list-item">利用梯度归因（Integrated Gradients）量化多组学基础模型中输入特征（基因/peak）对潜在表征的贡献度。</div><div class="list-item">基于归因矩阵而非原始表达矩阵执行非负矩阵分解（NMF），以提取跨批次稳健的基因调控程序。</div><div class="list-item">预计算大规模图谱的归因分数，通过简单的矩阵运算实现分钟级的基因集/通路激活状态查询。</div></div>
+    <div class="section-title">新颖洞见</div><div class="card"><div class="list-item">绝对表达量或传统归一化表达量并非基因功能重要性的最佳代理指标；基础模型的梯度归因能有效“去噪”并放大低表达关键调控因子（如TFs）的信号。</div><div class="list-item">基础模型的训练数据分布直接决定了归因解释的上限（如在未见过的细胞类型上归因失效），这提示在多组学FM训练中必须重视细胞类型和组织的覆盖度。</div><div class="list-item">计算发现的跨疾病共享细胞状态（如MS1）可以通过体外血清诱导实验进行因果验证，形成了“计算预测-图谱验证-体外机制”的完整闭环。</div></div>
+  
+  
+
+  <!-- Research Recommendations (type-branched) -->
+  
+  <div class="section-title" style="margin-top:24px;">研究建议</div>
+  
+    <div class="rec-card" style="border-left-color:var(--green);"><h4>可借鉴思路</h4><div class="rec-body"><p>在用户的RNA-ATAC多组学整合或空间转录组分析中，可借鉴SIGnature的思路：不直接对齐原始计数矩阵，而是将多模态数据输入预训练的多组学基础模型（如MultiVI或scMVP），利用XAI计算ATAC peak对基因表达潜在空间的归因贡献，从而实现更具生物学意义的peak-gene linking和调控网络推断。</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--teal);"><h4>补充分析</h4><div class="rec-body"><p>针对用户的因果推断痛点，可进一步分析归因分数与eQTL/sQTL效应的关联：评估携带风险等位基因的细胞，其靶基因的归因分数是否发生显著偏移，从而将遗传变异与单细胞层面的调控重要性变化直接联系起来。</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--blue);"><h4>复现路径</h4><div class="rec-body"><p>1. 安装SIGnature Python包及依赖（PyTorch, scikit-learn）。2. 下载预训练的SCimilarity模型权重。3. 准备AnnData格式的scRNA-seq数据，确保基因名称与模型输入空间对齐。4. 使用SIGnature API配置Integrated Gradients方法（设置插值步数等参数），批量计算细胞归因矩阵。5. 将归因矩阵替代原始表达矩阵，输入NMF或进行基因集平均评分。难点在于大规模数据的GPU内存管理和归因计算的并行化加速。</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--orange);"><h4>注意事项</h4><div class="rec-body"><p>迁移时必须评估目标细胞类型在基础模型训练集中的覆盖度。如果研究罕见组织或特定疾病状态（如特定肿瘤微环境），归因分数可能退化为噪声。此外，归因分数为相对贡献值，不可直接用于差异表达分析（DEG）的统计检验。</p></div></div>
+    <div class="rec-card" style="border-left-color:var(--purple);"><h4>迁移建议</h4><div class="rec-body"><p>结合用户的tech_stack（Scanpy, scvi-tools, PyTorch），建议首先使用scvi-tools构建或加载针对用户特定多组学数据的Foundation Model。随后，利用PyTorch的autograd机制或Captum库，自定义适配多模态输入（如RNA+ATAC）的归因计算函数。对于空间转录组数据，可尝试将归因分数作为Squidpy空间自相关分析的输入特征，以识别具有空间域特异性的关键调控基因。</p></div></div>
+  
+  
+
+  <!-- User profile snapshot -->
+  <div class="section-title" style="margin-top:24px;">用户画像快照</div>
+  <div class="card">
+    <p class="mb-8"><strong>研究领域：</strong>bioinformatics</p>
+    <p class="mb-8"><strong>关注重点：</strong>methods</p>
+    <p><strong>当前痛点：</strong>latent space alignment and cross-modality mapping；batch effect correction across multi-omics protocols；cross-modality integration of spatial and single-cell data；RNA-ATAC peak-gene linking and regulatory association；QTL / colocalization / protein-metabolite linkage；cell type annotation transfer across species and tissues；trajectory inference with lineage information；mediation analysis across molecular layers；causal regulatory inference from multi-omics data；distinguishing correlation from mechanism in multi-omics studies；interpretable deep learning for omics foundation models；evolutionary conservation analysis of regulatory networks；disease-associated cell state identification；multi-scale modeling from molecular to tissue level；immune cell receptor repertoire analysis；spatial domain identification with biological priors；sample size limitations and modality imbalance in multi-omics；batch effects disguised as biological signals；training-validation set independence and label leakage；anchor dependency and over-smoothing in integration models；LD-aware genetic integration: colocalization vs LD artifact；cross-platform / cross-cohort / cross-population reproducibility；missing data and asynchronous sampling across omics layers；measurement scale, dynamic range, and normalization incomparability across proteomics/metabolomics/lipidomics；correlation-only analysis without causal or directional evidence</p>
+  </div>
+</div>
+
+<!-- ========== Tab: Evidence Index (universal) ========== -->
+<div id="tab-evidence" class="tab-panel">
+  <input type="text" class="search-box" id="evidence-search" placeholder="搜索证据..." oninput="filterEvidence()">
+  <table id="evidence-table">
+    <thead><tr><th onclick="sortTable(0)">来源</th><th onclick="sortTable(1)">论断</th><th onclick="sortTable(2)">位置</th><th onclick="sortTable(3)">类型</th></tr></thead>
+    <tbody>
+    
+    <tr><td>主要发现</td><td>提出SIGnature框架，利用可解释人工智能（XAI）方法（如Integrated Gradients, Input x Gradient, DeepLIFT）计算scRNA-seq基础模型（如SCimilarity, scGPT等）的归因分数（attribution scores），以量化基因对细胞在潜在空间中位置的重要性。</td><td>Page 1-2 / Figure 1 / Figure 2</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>主要发现</td><td>归因分数能有效降低技术噪声（如测序深度、核糖体/线粒体基因干扰），并显著提升转录因子（TFs，如FOXP3, GATA3, RORC）等低表达关键调控基因的排名（two-sided Wilcoxon signed-rank test, P < 0.01）。</td><td>Page 3 / Figure 3d-f</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>主要发现</td><td>基于归因分数的非负矩阵分解（NMF）在跨研究数据集中能更稳定地识别生物学相关的基因程序（如Treg特征），其跨随机种子和特征集的一致性显著优于基于表达量的NMF。</td><td>Page 3-4 / Figure 3i-k / Extended Data Fig. 4-5</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>主要发现</td><td>在基因集评分（signature scoring）任务中，平均归因分数在32项测试中的23项取得了最高的F1分数，且跨数据集一致性显著优于Scanpy、ANS、JASMINE和UCell等传统方法。</td><td>Page 4-5 / Figure 4b-d</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>主要发现</td><td>通过在2200万个细胞的大规模图谱中查询MS1单核细胞特征，发现该特征与川崎病（KD）、噬血细胞性淋巴组织细胞增多症（HLH）和发热伴血小板减少综合征（SFTS）等多种高炎症疾病存在统计学显著关联。</td><td>Page 5-6 / Figure 5a-c</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>主要发现</td><td>体外实验验证了KD患者血清能诱导造血干细胞和祖细胞（HSPCs）产生MS1表型（HLA-DRAlow单核细胞比例显著增加，two-sided mixed linear model, P = 0.003），且临床队列中静脉注射免疫球蛋白（IVIG）治疗后MS1样细胞比例下降（two-sided Wilcoxon signed-rank P < 0.01），但体外IgG处理无直接抑制作用（P = 0.47）。</td><td>Page 6 / Figure 5d-g-h</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    
+    <tr><td>方法</td><td>Integrated Gradients (IG) for Attribution Calculation: 计算每个基因对单细胞基础模型潜在空间嵌入位置的贡献度，生成归因分数。</td><td>page 2 / Methods / Figure 3a</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>方法</td><td>Nonnegative Matrix Factorization (NMF): 在跨研究归因矩阵上识别稳健的、生物学相关的基因程序（如Treg特征）。</td><td>page 3-4 / Methods</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>方法</td><td>Signature Scoring via Mean Attribution: 量化已知基因集（如细胞类型标记、MS1特征）在单个细胞中的集体激活水平。</td><td>page 4-5 / Methods</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>方法</td><td>In vitro HSPC Serum Induction Assay: 验证KD患者血清是否能在体外诱导产生MS1样单核细胞表型。</td><td>page 6 / Methods / Figure 5g-h</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    
+    <tr><td>Figure. 1e</td><td>展示SIGnature框架的大规模图谱查询工作流，说明预计算归因分数如何实现分钟级的基因集搜索。</td><td>page 2</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Figure. 2</td><td>对多种基础模型（scFoundation, scGPT, SCimilarity等）和归因方法（IG, IxG, DL）进行计算时间、抗噪性和生物学信号保留的基准测试。</td><td>page 3</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Figure 2</td><td>与Figure. 2为同一图表的重复引用，展示基准测试结果。</td><td>page 3</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Figure. 3a</td><td>图解说明如何通过插值表达谱计算梯度，进而生成归因分数的数学过程。</td><td>page 3</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Figure 3d</td><td>展示在16种肺细胞类型中，归因分数显著提升了细胞类型相关转录因子（TFs）的排名，同时压制了线粒体和核糖体基因。</td><td>page 3</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Figure. 4a</td><td>热图展示PBMC数据集中，各细胞类型标记基因的平均归因分数在对应细胞类型中特异性升高。</td><td>page 5</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Figure. 5c</td><td>展示HLH患者在接受nivolumab治疗过程中，MS1样单核细胞比例随时间推移而下降的动态变化。</td><td>page 6</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Figure. 6a</td><td>文本截断未提供Figure 6的具体内容。推测为后续机制验证或空间转录组/多组学层面的MS1特征分布图。</td><td>page N/A (Truncated)</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Tab15</td><td>此ID实为正文中对scTab模型参考文献[15]的OCR误识别。指代使用scTab数据集训练的自监督基础模型。</td><td>page 2 (Reference 15)</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Table 1</td><td>正文未明确提供Table 1。推测指代Supplementary Table 1，列出了用于基准测试和图谱查询的所有scRNA-seq数据集元数据。</td><td>page N/A (Inferred Supplementary Table 1)</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>table 13</td><td>此ID实为正文中对scGPT模型参考文献[13]的OCR误识别。指代scGPT基础模型。</td><td>page 2 (Reference 13)</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Extended Data Figure. 1</td><td>展示用于基准测试和下游分析的多个独立scRNA-seq数据集的UMAP降维和细胞类型注释。</td><td>page N/A (Extended Data)</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Extended Data Figure. 2</td><td>补充展示不同归因方法（DL, IG, IxG）在不同FM上的详细性能指标（如标记基因富集度、计算时间）。</td><td>page N/A (Extended Data)</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Extended Data Figure. 3a</td><td>展示在多种非免疫细胞群体中，归因分数同样能有效区分细胞类型标记基因与管家基因（如线粒体基因）。</td><td>page N/A (Extended Data)</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Extended Data Figure. 4c</td><td>展示基于传统归一化表达量的NMF结果，因子往往难以解释且跨研究一致性差。</td><td>page N/A (Extended Data)</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Extended Data Figure. 5a</td><td>在人类肺细胞图谱（HLCA）中，归因衍生的NMF因子与细胞类型注释高度相关，而与研究来源（批次）相关性极低。</td><td>page N/A (Extended Data)</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Extended Data Figure. 6a</td><td>补充展示PBMC数据集中更多细胞类型的标记基因归因分数分布，证实特异性。</td><td>page N/A (Extended Data)</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Extended Data Figure. 7</td><td>展示在模拟的空间转录组（spot-level）数据中，归因分数与细胞类型比例呈正相关。</td><td>page N/A (Extended Data)</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Extended Data Figure. 8</td><td>详细展示监督和无监督分类任务中，归因评分与其他方法（Scanpy, UCell等）的F1分数对比。</td><td>page N/A (Extended Data)</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Extended Data Figure. 9a</td><td>展示MS1基因特征在髓系细胞（单核/巨噬细胞）中的特异性富集，证明后续聚焦髓系细胞的合理性。</td><td>page N/A (Extended Data)</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Extended Data Figure. 10</td><td>展示KD数据集NMF识别出的因子4与已知败血症/COVID-19 MS1特征的高度相关性。</td><td>page N/A (Extended Data)</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Supplementary Table 1</td><td>列出所有用于基准测试和图谱查询的scRNA-seq数据集详细信息（GEO/ArrayExpress ID、细胞数、组织、疾病）。</td><td>page N/A (Supplementary)</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    <tr><td>Supplementary Table 2</td><td>详细记录各基础模型的架构参数、训练目标及归因方法的超参数配置和基准测试原始数值。</td><td>page N/A (Supplementary)</td><td><span class="badge badge-stated">stated</span></td></tr>
+    
+    </tbody>
+  </table>
+</div>
+
+</div><!-- container -->
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <img id="lightbox-img" src="" alt="Figure">
+</div>
+
+<footer>
+  Generated by Hlokk v2.2.0 (detailed · article) &nbsp;|&nbsp; 20260609_180357 &nbsp;|&nbsp; Paper ID: 9105ddeab118c200
+</footer>
+
+<script>
+/* Tab switching */
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+  });
+});
+/* Lightbox */
+function openLightbox(src){const lb=document.getElementById('lightbox');document.getElementById('lightbox-img').src=src;lb.classList.add('show');}
+function closeLightbox(){document.getElementById('lightbox').classList.remove('show');}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLightbox();});
+/* Evidence filter */
+function filterEvidence(){
+  const q=document.getElementById('evidence-search').value.toLowerCase();
+  document.querySelectorAll('#evidence-table tbody tr').forEach(tr=>{
+    tr.style.display=tr.textContent.toLowerCase().includes(q)?'':'none';
+  });
+}
+/* Table sort */
+let sortDir={};
+function sortTable(col){
+  const tb=document.querySelector('#evidence-table tbody');
+  const rows=Array.from(tb.rows);
+  sortDir[col]=!sortDir[col];
+  rows.sort((a,b)=>{
+    const at=a.cells[col].textContent,bt=b.cells[col].textContent;
+    return sortDir[col]?at.localeCompare(bt):bt.localeCompare(at);
+  });
+  rows.forEach(r=>tb.appendChild(r));
+}
+</script>
+</body>
+</html>
