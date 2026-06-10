@@ -12,8 +12,10 @@ Usage:
     python hlokk_main.py --pdfs paper.pdf --workspace . --mode detailed --ingest --zotero-key ABC123
 """
 import argparse
+import json
 import os
 import sys
+import urllib.request
 from pathlib import Path
 
 # allow imports from the same directory
@@ -34,6 +36,67 @@ from report_generator import generate_html_report
 from gap_detector import detect_coverage_gaps
 
 console = Console()
+
+
+def _enrich_paper_urls(understanding: dict, zotero_key: str = None,
+                       paper_url_override: str = None) -> dict:
+    """
+    Enrich the understanding dict with clickable URLs for the HTML report header.
+
+    Adds:
+      - paper_url:   the article landing page (clickable title target)
+      - journal_url: publisher/preprint server page for the article
+
+    Priority:
+      1. --paper-url CLI override (e.g. from Zotero MCP — most reliable)
+      2. Zotero public API (works for public / group libraries)
+      3. DOI URL (browsers resolve doi.org redirects natively)
+    """
+    doi_raw = understanding.get("doi") or ""
+    # Normalise DOI into a full URL
+    if doi_raw:
+        doi_url = doi_raw if doi_raw.startswith("http") else f"https://doi.org/{doi_raw}"
+    else:
+        doi_url = None
+
+    paper_url = paper_url_override or doi_url
+    journal_url = None
+
+    # ---- Try Zotero public API for richer metadata ----
+    if zotero_key and not paper_url_override:
+        try:
+            zotero_api = f"https://api.zotero.org/items/{zotero_key}?format=json"
+            req = urllib.request.Request(zotero_api, headers={"User-Agent": "Hlokk/2.2"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            item_data = data.get("data", {})
+
+            zot_url = item_data.get("url", "")
+            zot_doi = item_data.get("DOI", "")
+
+            if zot_url:
+                paper_url = zot_url
+            elif zot_doi and not paper_url:
+                paper_url = f"https://doi.org/{zot_doi}"
+        except Exception:
+            pass
+
+    # ---- Resolve DOI redirect to get publisher landing page ----
+    # Note: many publishers (bioRxiv, Nature, etc.) block programmatic HEAD
+    # requests with Cloudflare / 403. Browsers resolve DOI redirects natively,
+    # so the DOI URL is a reliable default for clickable links.
+    # For a direct publisher URL, pass --paper-url from the orchestrator.
+
+    # ---- Derive journal / publisher page ----
+    if paper_url:
+        journal_url = paper_url  # article landing page = journal page
+
+    if not journal_url and paper_url:
+        journal_url = paper_url
+
+    understanding["paper_url"] = paper_url
+    understanding["journal_url"] = journal_url
+    return understanding
 
 
 def run_pipeline(args: argparse.Namespace) -> dict:
@@ -206,6 +269,15 @@ def run_pipeline(args: argparse.Namespace) -> dict:
     else:
         console.print("  [green]✓[/green] Foundation pass completed.")
 
+    # ------ enrich with paper URLs for clickable HTML header ------
+    understanding = _enrich_paper_urls(
+        understanding,
+        zotero_key=getattr(args, "zotero_key", None),
+        paper_url_override=getattr(args, "paper_url", None),
+    )
+    if understanding.get("paper_url"):
+        console.print(f"  Paper URL: [dim]{understanding['paper_url']}[/dim]")
+
     # ------ step 6: extract figure page images (default disabled) ------
     figure_data = None
     if args.with_figures:
@@ -368,6 +440,11 @@ def main():
         "--theme", default=None,
         help="HlokkObsidian theme path for ingest (e.g., 'Genomics/Data-Analysis'). "
              "If omitted, page is placed in 'Reading-Queue/Uncategorized/'"
+    )
+    parser.add_argument(
+        "--paper-url", default=None, dest="paper_url",
+        help="Explicit article URL for the HTML header (e.g. from Zotero MCP). "
+             "Overrides DOI-based resolution."
     )
     args = parser.parse_args()
     run_pipeline(args)

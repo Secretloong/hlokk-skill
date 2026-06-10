@@ -17,6 +17,8 @@ body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif
 header { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; padding:32px 0 24px; }
 header .container { display:flex; flex-direction:column; gap:8px; }
 header h1 { font-size:1.5em; font-weight:600; line-height:1.35; }
+header h1 a { color:#fff; text-decoration:none; border-bottom:1px solid rgba(255,255,255,.35); transition:border-color .2s; }
+header h1 a:hover { border-bottom-color:#fff; }
 header .meta { opacity:.85; font-size:.9em; }
 header .meta a { color:#cde; }
 header .tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
@@ -177,12 +179,13 @@ footer { text-align:center; padding:24px; color:var(--muted); font-size:.82em; }
 <!-- Header -->
 <header>
 <div class="container">
-  <h1>{{ u.title|default('未命名论文') }}
+  <h1>{% if u.paper_url or u.doi %}<a href="{{ u.paper_url|default(u.doi) }}" target="_blank" rel="noopener">{{ u.title|default('未命名论文') }}</a>{% else %}{{ u.title|default('未命名论文') }}{% endif %}
     <span class="mode-badge {{ analysis_mode|default('overview') }}">{{ analysis_mode|default('overview') }}</span>
     <span class="dtype-badge {{ doc_type|default('article') }}">{{ doc_type|default('article') }}</span>
   </h1>
   <div class="meta">
     {{ u.authors|default('') }} &nbsp;|&nbsp; {{ u.journal_year|default('') }}
+    {% if u.journal_url %} &nbsp;|&nbsp; <a href="{{ u.journal_url }}" target="_blank" rel="noopener">期刊页面</a>{% endif %}
     {% if u.code_availability %} &nbsp;|&nbsp; <a href="{{ u.code_availability }}" target="_blank">代码</a>{% endif %}
   </div>
   <div class="tags">
